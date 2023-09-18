@@ -4,8 +4,8 @@
 // ------------------------------------------------------------
 
 using System;
+using System.Formats.Asn1;
 using System.Linq;
-using System.Security.Cryptography.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
@@ -200,14 +200,14 @@ namespace KeyVaultCa.Core
             X509SubjectKeyIdentifierExtension ski
             )
         {
-            using (AsnWriter writer = new AsnWriter(AsnEncodingRules.DER))
+            AsnWriter writer = new AsnWriter(AsnEncodingRules.DER);
             {
                 writer.PushSequence();
 
                 if (ski != null)
                 {
                     Asn1Tag keyIdTag = new Asn1Tag(TagClass.ContextSpecific, 0);
-                    writer.WriteOctetString(keyIdTag, HexToByteArray(ski.SubjectKeyIdentifier));
+                    writer.WriteOctetString(HexToByteArray(ski.SubjectKeyIdentifier), keyIdTag);
                 }
 
                 Asn1Tag issuerNameTag = new Asn1Tag(TagClass.ContextSpecific, 1);
@@ -223,7 +223,7 @@ namespace KeyVaultCa.Core
 
                 Asn1Tag issuerSerialTag = new Asn1Tag(TagClass.ContextSpecific, 2);
                 System.Numerics.BigInteger issuerSerial = new System.Numerics.BigInteger(issuerSerialNumber);
-                writer.WriteInteger(issuerSerialTag, issuerSerial);
+                writer.WriteInteger(issuerSerial, issuerSerialTag);
 
                 writer.PopSequence();
                 return new X509Extension("2.5.29.35", writer.Encode(), false);
