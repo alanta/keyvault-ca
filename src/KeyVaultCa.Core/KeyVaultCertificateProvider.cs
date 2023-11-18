@@ -1,19 +1,17 @@
-// ------------------------------------------------------------
-//  Copyright (c) Microsoft Corporation.  All rights reserved.
-//  Licensed under the MIT License (MIT). See License.txt in the repo root for license information.
-// ------------------------------------------------------------
-
 using Microsoft.Extensions.Logging;
-using Org.BouncyCastle.Pkcs;
 using System;
-using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading;
 using System.Threading.Tasks;
+using Azure.Identity;
+using Azure.Security.KeyVault.Certificates;
+using Org.BouncyCastle.Asn1;
+using Org.BouncyCastle.Asn1.X9;
 
 namespace KeyVaultCa.Core
 {
-    public class KeyVaultCertificateProvider : IKeyVaultCertificateProvider
+    public class KeyVaultCertificateProvider
     {
         private readonly KeyVaultServiceClient _keyVaultServiceClient;
         private readonly ILogger _logger;
@@ -24,9 +22,9 @@ namespace KeyVaultCa.Core
             _logger = logger;
         }
 
-        public async Task CreateCACertificateAsync(string issuerCertificateName, string subject, int certPathLength)
+        public async Task CreateCACertificateAsync(string issuerCertificateName, string subject, int certPathLength, CancellationToken ct)
         {
-            var certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(issuerCertificateName).ConfigureAwait(false);
+            var certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(issuerCertificateName, ct).ConfigureAwait(false);
 
             if (certVersions != 0)
             {
@@ -44,76 +42,89 @@ namespace KeyVaultCa.Core
                         notBefore.AddMonths(48),
                         4096,
                         HashAlgorithmName.SHA256,
-                        certPathLength);
+                        certPathLength,
+                        ct);
                 _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created succsessfully.", issuerCertificateName, certPathLength);
             }
         }
 
-        public async Task<X509Certificate2> GetCertificateAsync(string issuerCertificateName)
-        {
-            var certBundle = await _keyVaultServiceClient.GetCertificateAsync(issuerCertificateName).ConfigureAwait(false);
-            return new X509Certificate2(certBundle.Value.Cer);
-        }
-
-        public async Task<IList<X509Certificate2>> GetPublicCertificatesByName(IEnumerable<string> certNames)
-        {
-            var certs = new List<X509Certificate2>();
-
-            foreach (var issuerName in certNames)
-            {
-                _logger.LogDebug("Call GetPublicCertificatesByName method with following certificate name: {name}.", issuerName);
-                var cert = await GetCertificateAsync(issuerName).ConfigureAwait(false);
-
-                if (cert != null)
-                {
-                    certs.Add(cert);
-                }
-            }
-
-            return certs;
-        }
-
         /// <summary>
-        /// Creates a KeyVault signed certficate from signing request.
+        /// Sings a KeyVault Certificate Request with a CA certificate, also in KeyVault.
         /// </summary>
         public async Task<X509Certificate2> SignRequestAsync(
-            byte[] certificateRequest,
-            string issuerCertificateName,
-            int validityInDays,
-            bool caCert = false)
+            Uri certificateUri,
+            Uri issuerCertificateUri,
+            int validityInDays)
         {
-            _logger.LogInformation("Preparing certificate request with issuer name {name}, {days} days validity period and 'is a CA certificate' flag set to {flag}.", issuerCertificateName, validityInDays, caCert);
-
-            var pkcs10CertificationRequest = new Pkcs10CertificationRequest(certificateRequest);
-
-            if (!pkcs10CertificationRequest.Verify())
+            if (!KeyVaultCertificateIdentifier.TryCreate(certificateUri, out var csrCertificateIdentifier))
             {
-                _logger.LogError("CSR signature invalid.");
-                throw new ArgumentException("CSR signature invalid.");
+                throw new ArgumentException($"Invalid certificate identifier: {certificateUri}", nameof(certificateUri));
             }
 
-            var info = pkcs10CertificationRequest.GetCertificationRequestInfo();
+            var credential = new DefaultAzureCredential();
+            var csrKeyVault = new CertificateClient(csrCertificateIdentifier.VaultUri, credential );
+
+            if (!KeyVaultCertificateIdentifier.TryCreate(issuerCertificateUri, out var issuerCertificateIdentifier))
+            {
+                throw new ArgumentException($"Invalid issuer certificate identifier: {issuerCertificateUri}", nameof(issuerCertificateUri));
+            }
+            var issuerKeyVault = new CertificateClient(issuerCertificateIdentifier.VaultUri, credential);
             
-            var notBefore = DateTime.UtcNow;
-            var notAfter = DateTime.UtcNow.AddDays(validityInDays);
+            var csrOperation = await csrKeyVault.GetCertificateOperationAsync(csrCertificateIdentifier.Name).ConfigureAwait(false);
 
-            var certBundle = await _keyVaultServiceClient.GetCertificateAsync(issuerCertificateName).ConfigureAwait(false);
+            _logger.LogInformation("CSR: {csr}", Convert.ToBase64String(csrOperation.Properties.Csr));
 
-            // determine hash algorith from CA certificate
+            if (csrOperation?.Properties?.Csr == null)
+            {
+                throw new ArgumentException("CSR not found.");
+            }
+            if (csrOperation.HasCompleted)
+            {
+                throw new ArgumentException("No pending CSR on certificate.");
+            }
+
+            /*
+            var requestedExtensions = pkcs10CertificationRequest.GetRequestedExtensions();
+            foreach (var oid in requestedExtensions.GetExtensionOids())
+            {
+                
+                // TODO: implement extension handling
+                // 2.5.29.19 - Basic Constraints
+                // 2.5.29.37 - Extended key usage
+                // 2.5.29.15 - Key Usage
+                // 2.5.29.17 - Subject Alternative Name
+
+                _logger.LogInformation("Extension {oid} requested.", oid);
+            }*/
+
+
+            var certBundle = await issuerKeyVault.GetCertificateAsync(issuerCertificateIdentifier.Name).ConfigureAwait(false);
+            if (certBundle.Value == null)
+            {
+                throw new ArgumentException("Issuer certificate not found.");
+            }
+
             var signingCert = new X509Certificate2(certBundle.Value.Cer);
-            var publicKey = KeyVaultCertFactory.GetRSAPublicKey(info.SubjectPublicKeyInfo);
-
-            return await KeyVaultCertFactory.CreateSignedCertificate(
-                info.Subject.ToString(),
-                2048,
-                notBefore,
-                notAfter,
-                HashAlgorithmName.SHA256,
+            
+            return await CertificateFactory.SignRequest(
+                csrOperation.Properties.Csr,
                 signingCert,
-                publicKey,
-                new KeyVaultSignatureGenerator(certBundle.Value.KeyId, _keyVaultServiceClient.Credential, true),
-                caCert
-                );
+                new KeyVaultSignatureGenerator(certBundle.Value.KeyId, credential, signingCert.SignatureAlgorithm),
+                validityInDays,
+                HashAlgorithmName.SHA256 );
+        }
+    }
+
+    public static class ObjectIdentifierExtensions
+    {
+        public static bool IsEllipticCurveKey(this Oid? oid)
+        {
+            return oid != null && new DerObjectIdentifier(oid.Value).On(X9ObjectIdentifiers.ansi_X9_62);
+        }
+
+        public static bool IsDiffieHellmanKey(this Oid? oid)
+        {
+            return oid!=null && new DerObjectIdentifier(oid.Value).On(X9ObjectIdentifiers.DHPublicNumber);
         }
     }
 }

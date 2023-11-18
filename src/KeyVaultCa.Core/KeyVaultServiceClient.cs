@@ -13,6 +13,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+using Azure.Core;
 
 namespace KeyVaultCa.Core
 {
@@ -23,12 +24,12 @@ namespace KeyVaultCa.Core
     {
         private readonly CertificateClient _certificateClient;
         private readonly ILogger _logger;
-        public DefaultAzureCredential Credential { get; set; }
+        public TokenCredential Credential { get; set; }
 
         /// <summary>
         /// Create the certificate client for managing certificates in Key Vault, using developer authentication locally or managed identity in the cloud.
         /// </summary>
-        public KeyVaultServiceClient(string keyVaultUrl, DefaultAzureCredential credential, ILogger<KeyVaultServiceClient> logger)
+        public KeyVaultServiceClient(string keyVaultUrl, TokenCredential credential, ILogger<KeyVaultServiceClient> logger)
         {
             _certificateClient = new CertificateClient(new Uri(keyVaultUrl), credential);
             _logger = logger;
@@ -42,7 +43,7 @@ namespace KeyVaultCa.Core
                 DateTime notAfter,
                 int keySize,
                 HashAlgorithmName hashAlgorithm,
-                int certPathLength,
+                int? certPathLength = 1,
                 CancellationToken ct = default)
         {
             try
@@ -62,7 +63,7 @@ namespace KeyVaultCa.Core
             try
             {
                 // create policy for self signed certificate with a new key
-                var policySelfSignedNewKey = CreateCertificatePolicy(subject, keySize, true, false);
+                var policySelfSignedNewKey = CreateCertificatePolicy(subject, keySize, true, CertificateKeyType.Rsa, reuseKey: false);
 
                 var newCertificateOperation = await _certificateClient.StartCreateCertificateAsync(id, policySelfSignedNewKey, true, null, ct).ConfigureAwait(false);
                 await newCertificateOperation.WaitForCompletionAsync(ct).ConfigureAwait(false);
@@ -82,7 +83,7 @@ namespace KeyVaultCa.Core
                 _logger.LogDebug("Temporary certificate backing key identifier is {key}.", createdCertificateBundle.Value.KeyId);
 
                 // create policy for unknown issuer and reuse key
-                var policyUnknownReuse = CreateCertificatePolicy(subject, keySize, false, true);
+                var policyUnknownReuse = CreateCertificatePolicy(subject, keySize, false, CertificateKeyType.Rsa, reuseKey: true);
                 var tags = CreateCertificateTags(id, false);
 
                 // create the CSR
@@ -108,17 +109,14 @@ namespace KeyVaultCa.Core
 
                 // create the self signed root CA certificate
                 _logger.LogDebug("Create the self signed root CA certificate.");
-                var publicKey = KeyVaultCertFactory.GetRSAPublicKey(info.SubjectPublicKeyInfo);
-                var signedcert = await KeyVaultCertFactory.CreateSignedCertificate(
+                var publicKey = CertificateFactory.GetRSAPublicKey(info.SubjectPublicKeyInfo);
+                var signedcert = await CertificateFactory.CreateSignedCACertificate(
                     subject,
-                    (ushort)keySize,
                     notBefore,
                     notAfter,
                     hashAlgorithm,
-                    null,
                     publicKey,
-                    new KeyVaultSignatureGenerator(createdCertificateBundle.Value.KeyId, Credential, false),
-                    true,
+                    new KeyVaultSignatureGenerator(createdCertificateBundle.Value.KeyId, Credential),
                     certPathLength);
 
                 // merge Root CA cert with the signed certificate
@@ -159,7 +157,7 @@ namespace KeyVaultCa.Core
         /// <summary>
         /// Get Certificate with Policy from Key Vault.
         /// </summary>
-        internal async Task<Response<KeyVaultCertificateWithPolicy>> GetCertificateAsync(string certName, CancellationToken ct = default)
+        public async Task<Response<KeyVaultCertificateWithPolicy>> GetCertificateAsync(string certName, CancellationToken ct = default)
         {
             return await _certificateClient.GetCertificateAsync(certName, ct).ConfigureAwait(false);
         }
@@ -172,10 +170,10 @@ namespace KeyVaultCa.Core
         /// <summary>
         /// Get certificate versions for given certificate name.
         /// </summary>
-        internal async Task<int> GetCertificateVersionsAsync(string certName)
+        public async Task<int> GetCertificateVersionsAsync(string certName, CancellationToken ct)
         {
             var versions = 0;
-            await foreach (CertificateProperties cert in _certificateClient.GetPropertiesOfCertificateVersionsAsync(certName))
+            await foreach (CertificateProperties cert in _certificateClient.GetPropertiesOfCertificateVersionsAsync(certName, ct))
             {
                 versions++;
             }
@@ -195,17 +193,19 @@ namespace KeyVaultCa.Core
 
         private CertificatePolicy CreateCertificatePolicy(
             string subject,
-            int keySize,
+            int keySize, // 512, 1024, 2048, 3072, 4096
             bool selfSigned,
+            CertificateKeyType keyType,
             bool reuseKey = false,
             bool exportable = false)
         {
             var issuerName = selfSigned ? "Self" : "Unknown";
             var policy = new CertificatePolicy(issuerName, subject)
             {
+                
                 Exportable = exportable,
                 KeySize = keySize,
-                KeyType = "RSA",
+                KeyType = keyType,
                 ReuseKey = reuseKey,
                 ContentType = CertificateContentType.Pkcs12
             };

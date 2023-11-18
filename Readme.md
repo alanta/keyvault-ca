@@ -13,6 +13,8 @@ Please make sure these tools are installed:
 
 - [Step CLI](https://smallstep.com/docs/step-cli/installation/) - This is used to manage the CA and issue certificates.  
   Setup by running `winget install Smallstep.step`
+- [Step KMS Extension](https://github.com/smallstep/step-kms-plugin/releases)
+  Download and unzip it into `%USERPROFILE%\.step\plugins\` or add the binary to the path.
 - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) - used to manage the certificates into Azure Key Vault
 - [Powershell 7+](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell?view=powershell-7.1) - used to run the scripts in this repository
 
@@ -22,20 +24,27 @@ You'll also need to login to Azure CLI and have a Key Vault ready to store the c
 
 ## Setup an offline CA
 
-This CA was initialized by running the following command:
+First, make sure you have deployed an Azure KeyVault instance, and have logged in to Azure CLI. You'll need permissions to manage keys and certificates. 
+
+Initialize the CA using Step CLI. This will create a root and intermediate certificate.
 
 ```powershell
 $ENV:STEPPATH="$PWD/ca"
 mkdir $PWD/ca
-step ca init --deployment-type standalone --name MyLocalDomain --dns mycompany.local --address 127.0.0.1:443 --provisioner MyCompany 
+step ca init --deployment-type standalone ` 
+   --kms='azurekms:vault=my-azure-kv' `
+   --kms-root='azurekms:vault=my-azure-kv;name=my-root-key' `
+   --kms-intermediate='azurekms:vault=my-azure-kv;name=my-intermediate-key' `
+   --name MyLocalDomain `
+   --provisioner MyCompany `
+   --dns mycompany.local `
+   --address 127.0.0.1:443 
 ```
 
-This generates a root and intermediate certificate under `ca/certs`. The keys are under `ca/secrets`.
+This generates a root and intermediate certificate under `ca/certs`. The keys are stored in KeyVault.
 The CA certs are valid for 10 years.
 
-If you follow these steps to create a new CA, make sure you keep the generated passwords safe! You'll need them to prepare the CA certificates to Azure later.
-
-The secrets generated for this CA must *not* be checked in to source control. Once the certificates have been pushed to Key Vault, the secrets should be deleted and passwords are no longer needed.
+Please make sure you keep the password safe, you can forget it when the certificates have been uploaded to Key Vault.
 
 ## Upload CA certificates to Azure Key Vault
 

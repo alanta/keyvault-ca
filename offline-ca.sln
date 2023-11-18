@@ -5,11 +5,11 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{804344C0-CB56-424F-BD47-C2F5FA27432C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyVaultCa.Core", "src\KeyVaultCa.Core\KeyVaultCa.Core.csproj", "{1CF23629-1F20-48FD-B3FD-8502EA5047E4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KeyVaultCa.Core", "src\KeyVaultCa.Core\KeyVaultCa.Core.csproj", "{1CF23629-1F20-48FD-B3FD-8502EA5047E4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CertificateIssuer", "CerficateIssuer\CertificateIssuer.csproj", "{162BF993-B5E8-4065-913A-07DF59E059A5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CertificateIssuer", "CerficateIssuer\CertificateIssuer.csproj", "{162BF993-B5E8-4065-913A-07DF59E059A5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyVaultCA.Tests", "KeyVaultCA.Tests\KeyVaultCA.Tests.csproj", "{DCC66F26-5FC4-46B6-A246-F13EED31EE16}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KeyVaultCA.Tests", "KeyVaultCA.Tests\KeyVaultCA.Tests.csproj", "{DCC66F26-5FC4-46B6-A246-F13EED31EE16}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

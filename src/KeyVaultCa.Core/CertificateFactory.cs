@@ -12,51 +12,131 @@ using System.Threading.Tasks;
 
 namespace KeyVaultCa.Core
 {
-    public class KeyVaultCertFactory
+    public static class CertificateFactory
     {
         public const int SerialNumberLength = 20;
         public const int DefaultKeySize = 2048;
+
+        public static Task<X509Certificate2> SignRequest(byte[] csr, X509Certificate2 issuerCert,
+            X509SignatureGenerator generator, int validityInDays, HashAlgorithmName? hashAlgorithm = null)
+        {
+            if (csr == null)
+            {
+                throw new ArgumentNullException(nameof(csr));
+            }
+
+            if (issuerCert == null)
+            {
+                throw new ArgumentNullException(nameof(issuerCert));
+            }
+
+            if (validityInDays <= 0)
+            {
+                throw new ArgumentException("validityInDays must be greater than 0");
+            }
+
+            var request = CertificateRequest.LoadSigningRequest(csr, hashAlgorithm ?? HashAlgorithmName.SHA256,
+                CertificateRequestLoadOptions.UnsafeLoadCertificateExtensions, RSASignaturePadding.Pkcs1);
+
+            var alternativeDNSNames = request.CertificateExtensions.OfType<X509SubjectAlternativeNameExtension>()
+                .SelectMany(x => x.EnumerateDnsNames()).ToArray();
+            // TODO : verify subject alternative names are allowed
+
+            var basicConstraints =
+                request.CertificateExtensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
+            if (basicConstraints == null)
+            {
+                request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+            }
+            else
+            {
+                // make sure it's not a CA cert
+                if (basicConstraints.CertificateAuthority)
+                {
+                    throw new NotSupportedException("Cannot issue a CA certificate.");
+                }
+            }
+
+
+            var defaultFlags = X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment;
+            var keyUsage = request.CertificateExtensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
+            if (keyUsage == null)
+            {
+                request.CertificateExtensions.Add(new X509KeyUsageExtension(defaultFlags, true));
+            }
+            else
+            {
+
+            }
+
+            var enhancedKeyUsage =
+                request.CertificateExtensions.OfType<X509EnhancedKeyUsageExtension>().FirstOrDefault();
+            if (enhancedKeyUsage == null)
+            {
+                // Enhanced key usage
+                request.CertificateExtensions.Add(
+                    new X509EnhancedKeyUsageExtension(
+                        new OidCollection
+                        {
+                            new Oid("1.3.6.1.5.5.7.3.1"), // serverAuth
+                            new Oid("1.3.6.1.5.5.7.3.2") }, // clientAuth
+                        true));
+            }
+       
+            var serialNumber = GenerateSerialNumber();
+            var notBefore = DateTime.UtcNow.AddDays(-1);
+            var notAfter = notBefore.AddDays(validityInDays);
+
+            if (notAfter > issuerCert.NotAfter)
+            {
+                notAfter = issuerCert.NotAfter;
+            }
+            if (notBefore < issuerCert.NotBefore)
+            {
+                notBefore = issuerCert.NotBefore;
+            }
+
+            X509Certificate2 signedCert = request.Create(
+                issuerCert.SubjectName,
+                generator,
+                notBefore,
+                notAfter,
+                serialNumber
+            );
+
+            return Task.FromResult(signedCert);
+        }
 
         /// <summary>
         /// Creates a KeyVault signed certificate.
         /// </summary>
         /// <returns>The signed certificate</returns>
-        public static Task<X509Certificate2> CreateSignedCertificate(
+        public static Task<X509Certificate2> CreateSignedCACertificate(
             string subjectName,
-            ushort keySize,
             DateTime notBefore,
             DateTime notAfter,
             HashAlgorithmName hashAlgorithm,
-            X509Certificate2 issuerCAKeyCert,
             RSA publicKey,
             X509SignatureGenerator generator,
-            bool caCert = false,
-            int certPathLength = 0)
+            int? certPathLength)
         {
             if (publicKey == null)
             {
                 throw new NotSupportedException("Need a public key and a CA certificate.");
             }
-
-            if (publicKey.KeySize != keySize)
-            {
-                throw new NotSupportedException(string.Format("Public key size {0} does not match expected key size {1}", publicKey.KeySize, keySize));
-            }
-
+            
             if (notBefore > notAfter)
             {
                 throw new ArgumentException("notBefore must be before notAfter");
             }
 
             // new serial number
-            byte[] serialNumber = new byte[SerialNumberLength];
-            RandomNumberGenerator.Fill(serialNumber); // yikes... should be using a crypto RNG
-            serialNumber[0] &= 0x7F;
+            var serialNumber = GenerateSerialNumber();
 
             var subjectDN = new X500DistinguishedName(subjectName);
             var request = new CertificateRequest(subjectDN, publicKey, hashAlgorithm, RSASignaturePadding.Pkcs1);
-
-            request.CertificateExtensions.Add(new X509BasicConstraintsExtension(caCert, caCert, certPathLength, true));
+            
+            request.CertificateExtensions.Add(new X509BasicConstraintsExtension(certificateAuthority: true, certPathLength.HasValue, certPathLength ?? 0, true));
 
             // Subject Key Identifier
             var ski = new X509SubjectKeyIdentifierExtension(
@@ -67,54 +147,15 @@ namespace KeyVaultCa.Core
             request.CertificateExtensions.Add(ski);
 
             // Authority Key Identifier
-            if (issuerCAKeyCert != null)
-            {
-                request.CertificateExtensions.Add(BuildAuthorityKeyIdentifier(issuerCAKeyCert));
-            }
-            else
-            {
-                request.CertificateExtensions.Add(BuildAuthorityKeyIdentifier(subjectDN, serialNumber.Reverse().ToArray(), ski));
-            }
-
-            if (caCert)
-            {
-                request.CertificateExtensions.Add(
-                    new X509KeyUsageExtension(
-                        X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign,
-                        true));
-            }
-            else
-            {
-                // Key Usage
-                X509KeyUsageFlags defaultFlags =
-                    X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.DataEncipherment |
-                        X509KeyUsageFlags.NonRepudiation | X509KeyUsageFlags.KeyEncipherment;
-
-                request.CertificateExtensions.Add(new X509KeyUsageExtension(defaultFlags, true));
-
-                // Enhanced key usage
-                request.CertificateExtensions.Add(
-                    new X509EnhancedKeyUsageExtension(
-                        new OidCollection {
-                        new Oid("1.3.6.1.5.5.7.3.1"),
-                        new Oid("1.3.6.1.5.5.7.3.2") }, true));
-            }
-
-            if (issuerCAKeyCert != null)
-            {
-                if (notAfter > issuerCAKeyCert.NotAfter)
-                {
-                    notAfter = issuerCAKeyCert.NotAfter;
-                }
-                if (notBefore < issuerCAKeyCert.NotBefore)
-                {
-                    notBefore = issuerCAKeyCert.NotBefore;
-                }
-            }
-
-            var issuerSubjectName = issuerCAKeyCert != null ? issuerCAKeyCert.SubjectName : subjectDN;
+            request.CertificateExtensions.Add(BuildAuthorityKeyIdentifier(subjectDN, serialNumber.Reverse().ToArray(), ski));
+        
+            request.CertificateExtensions.Add(
+                new X509KeyUsageExtension(
+                    X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign,
+                    true));
+            
             X509Certificate2 signedCert = request.Create(
-                issuerSubjectName,
+                subjectDN,
                 generator,
                 notBefore,
                 notAfter,
@@ -124,12 +165,24 @@ namespace KeyVaultCa.Core
             return Task.FromResult(signedCert);
         }
 
+        private static byte[] GenerateSerialNumber()
+        {
+            byte[] serialNumber = new byte[SerialNumberLength];
+            RandomNumberGenerator.Fill(serialNumber); // yikes... should be using a crypto RNG?
+            serialNumber[0] &= 0x7F;
+            return serialNumber;
+        }
+
         /// <summary>
         /// Get RSA public key from a CSR.
         /// </summary>
         public static RSA GetRSAPublicKey(Org.BouncyCastle.Asn1.X509.SubjectPublicKeyInfo subjectPublicKeyInfo)
         {
             Org.BouncyCastle.Crypto.AsymmetricKeyParameter asymmetricKeyParameter = Org.BouncyCastle.Security.PublicKeyFactory.CreateKey(subjectPublicKeyInfo);
+            if(!(asymmetricKeyParameter is Org.BouncyCastle.Crypto.Parameters.RsaKeyParameters))
+            {
+                throw new NotSupportedException("Only RSA public keys are supported.");
+            }
             Org.BouncyCastle.Crypto.Parameters.RsaKeyParameters rsaKeyParameters = (Org.BouncyCastle.Crypto.Parameters.RsaKeyParameters)asymmetricKeyParameter;
             RSAParameters rsaKeyInfo = new RSAParameters
             {
@@ -138,26 +191,6 @@ namespace KeyVaultCa.Core
             };
             RSA rsa = RSA.Create(rsaKeyInfo);
             return rsa;
-        }
-
-        private static HashAlgorithmName GetRSAHashAlgorithmName(uint hashSizeInBits)
-        {
-            if (hashSizeInBits <= 160)
-            {
-                return HashAlgorithmName.SHA1;
-            }
-            else if (hashSizeInBits <= 256)
-            {
-                return HashAlgorithmName.SHA256;
-            }
-            else if (hashSizeInBits <= 384)
-            {
-                return HashAlgorithmName.SHA384;
-            }
-            else
-            {
-                return HashAlgorithmName.SHA512;
-            }
         }
 
         /// <summary>
