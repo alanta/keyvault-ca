@@ -9,11 +9,13 @@ using Azure.Security.KeyVault.Certificates;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using Azure.Core;
+using Azure.Security.KeyVault.Keys.Cryptography;
 
 namespace KeyVaultCa.Core
 {
@@ -23,18 +25,18 @@ namespace KeyVaultCa.Core
     public class KeyVaultServiceClient
     {
         private readonly CertificateClient _certificateClient;
+        private readonly Func<Uri, CryptographyClient> _cryptoClientFactory;
         private readonly ILogger _logger;
-        public TokenCredential Credential { get; set; }
 
         /// <summary>
         /// Create the certificate client for managing certificates in Key Vault, using developer authentication locally or managed identity in the cloud.
         /// </summary>
-        public KeyVaultServiceClient(string keyVaultUrl, TokenCredential credential, ILogger<KeyVaultServiceClient> logger)
+        public KeyVaultServiceClient(CertificateClient certificateClient, Func<Uri,CryptographyClient> cryptoClientFactory, ILogger<KeyVaultServiceClient> logger)
         {
-            _certificateClient = new CertificateClient(new Uri(keyVaultUrl), credential);
+            _certificateClient = certificateClient;
+            _cryptoClientFactory = cryptoClientFactory;
             _logger = logger;
-            Credential = credential;
-        }
+ }
 
         internal async Task<X509Certificate2> CreateCACertificateAsync(
                 string id,
@@ -62,7 +64,7 @@ namespace KeyVaultCa.Core
 
             try
             {
-                // create policy for self signed certificate with a new key
+                // create policy for self-signed certificate with a new key
                 var policySelfSignedNewKey = CreateCertificatePolicy(subject, keySize, true, CertificateKeyType.Rsa, reuseKey: false);
 
                 var newCertificateOperation = await _certificateClient.StartCreateCertificateAsync(id, policySelfSignedNewKey, true, null, ct).ConfigureAwait(false);
@@ -77,7 +79,7 @@ namespace KeyVaultCa.Core
                 _logger.LogDebug("Creation of temporary self signed certificate with id {id} completed.", id);
 
                 var createdCertificateBundle = await _certificateClient.GetCertificateAsync(id, ct).ConfigureAwait(false);
-                caTempCertIdentifier = createdCertificateBundle.Value.Id.ToString();
+                caTempCertIdentifier = createdCertificateBundle.Value.Id.Segments.Last();
 
                 _logger.LogDebug("Temporary certificate identifier is {certIdentifier}.", caTempCertIdentifier);
                 _logger.LogDebug("Temporary certificate backing key identifier is {key}.", createdCertificateBundle.Value.KeyId);
@@ -116,7 +118,7 @@ namespace KeyVaultCa.Core
                     notAfter,
                     hashAlgorithm,
                     publicKey,
-                    new KeyVaultSignatureGenerator(createdCertificateBundle.Value.KeyId, Credential),
+                    new KeyVaultSignatureGenerator(_cryptoClientFactory, createdCertificateBundle.Value.KeyId),
                     certPathLength);
 
                 // merge Root CA cert with the signed certificate

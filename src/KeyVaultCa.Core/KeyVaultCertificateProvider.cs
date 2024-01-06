@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
+using Azure.Security.KeyVault.Keys.Cryptography;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X9;
 
@@ -54,21 +55,22 @@ namespace KeyVaultCa.Core
         public async Task<X509Certificate2> SignRequestAsync(
             Uri certificateUri,
             Uri issuerCertificateUri,
-            int validityInDays)
+            int validityInDays,
+            Func<Uri, CertificateClient> keyVaultClientFactory,
+            Func<Uri,CryptographyClient> cryptoClientFactory)
         {
             if (!KeyVaultCertificateIdentifier.TryCreate(certificateUri, out var csrCertificateIdentifier))
             {
                 throw new ArgumentException($"Invalid certificate identifier: {certificateUri}", nameof(certificateUri));
             }
 
-            var credential = new DefaultAzureCredential();
-            var csrKeyVault = new CertificateClient(csrCertificateIdentifier.VaultUri, credential );
+            var csrKeyVault = keyVaultClientFactory(csrCertificateIdentifier.VaultUri);
 
             if (!KeyVaultCertificateIdentifier.TryCreate(issuerCertificateUri, out var issuerCertificateIdentifier))
             {
                 throw new ArgumentException($"Invalid issuer certificate identifier: {issuerCertificateUri}", nameof(issuerCertificateUri));
             }
-            var issuerKeyVault = new CertificateClient(issuerCertificateIdentifier.VaultUri, credential);
+            var issuerKeyVault = keyVaultClientFactory(issuerCertificateIdentifier.VaultUri);
             
             var csrOperation = await csrKeyVault.GetCertificateOperationAsync(csrCertificateIdentifier.Name).ConfigureAwait(false);
 
@@ -109,7 +111,7 @@ namespace KeyVaultCa.Core
             return await CertificateFactory.SignRequest(
                 csrOperation.Properties.Csr,
                 signingCert,
-                new KeyVaultSignatureGenerator(certBundle.Value.KeyId, credential, signingCert.SignatureAlgorithm),
+                new KeyVaultSignatureGenerator(cryptoClientFactory, certBundle.Value.KeyId, signingCert.SignatureAlgorithm),
                 validityInDays,
                 HashAlgorithmName.SHA256 );
         }

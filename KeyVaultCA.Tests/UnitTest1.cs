@@ -16,6 +16,7 @@ using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Pkcs;
 using System.Reflection.Emit;
+using Azure.Security.KeyVault.Keys.Cryptography;
 using Org.BouncyCastle.Asn1.Ocsp;
 
 namespace KeyVaultCA.Tests
@@ -51,7 +52,8 @@ namespace KeyVaultCA.Tests
         [Fact]
         public async Task CreateCACertificate()
         {
-            var kvServiceClient = new KeyVaultServiceClient(keyVaultUrl, credential, _loggerFactory.CreateLogger<KeyVaultServiceClient>());
+            var certificateClient = new CertificateClient(new Uri(keyVaultUrl), credential);
+            var kvServiceClient = new KeyVaultServiceClient(certificateClient, uri => new CryptographyClient(uri, credential), _loggerFactory.CreateLogger<KeyVaultServiceClient>());
             var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, _loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
 
             await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", 1, default);
@@ -66,11 +68,16 @@ namespace KeyVaultCA.Tests
             var pendingCertificateIdentifier = new KeyVaultCertificateIdentifier(new Uri($"{keyVaultUrl}certificates/{pendingCertificateName}"));
             var issuerCertificateIdentifier = new KeyVaultCertificateIdentifier(new Uri($"{keyVaultUrl}certificates/{issuerCertificateName}"));
 
-            var kvServiceClient = new KeyVaultServiceClient(keyVaultUrl, credential,
-                               NullLoggerFactory.Instance.CreateLogger<KeyVaultServiceClient>());
+            var certificateClient = new CertificateClient(new Uri(keyVaultUrl), credential);
+            var kvServiceClient = new KeyVaultServiceClient(certificateClient, uri => new CryptographyClient(uri, credential), NullLoggerFactory.Instance.CreateLogger<KeyVaultServiceClient>());
             var kvCertProvider = new KeyVaultCertificateProvider( kvServiceClient, _loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
 
-            var cert = await kvCertProvider.SignRequestAsync(pendingCertificateIdentifier.SourceId, issuerCertificateIdentifier.SourceId, 30);
+            var cert = await kvCertProvider.SignRequestAsync(
+                pendingCertificateIdentifier.SourceId,
+                issuerCertificateIdentifier.SourceId, 
+                30, 
+                uri => new CertificateClient(uri, credential),
+                uri => new CryptographyClient(uri, credential));
 
             cert.Should().NotBeNull();
 
@@ -106,7 +113,7 @@ namespace KeyVaultCA.Tests
             var certBundle = await certificateClient.GetCertificateAsync(issuerCertificateName).ConfigureAwait(false);
             var signingCert = new X509Certificate2(certBundle.Value.Cer);
 
-            var signatureGenerator = new KeyVaultSignatureGenerator(certBundle.Value.KeyId, credential, signingCert.SignatureAlgorithm);
+            var signatureGenerator = new KeyVaultSignatureGenerator(uri => new CryptographyClient(uri, credential), certBundle.Value.KeyId,  signingCert.SignatureAlgorithm);
 
             var cert = await CertificateFactory.SignRequest(operation.Properties.Csr, signingCert, signatureGenerator, 30, HashAlgorithmName.SHA256 );
 

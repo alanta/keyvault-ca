@@ -3,15 +3,8 @@ using Xunit.Abstractions;
 
 namespace KeyVaultCA.Tests.Tools;
 
-public sealed class XunitLoggerFactory : ILoggerFactory
+public sealed class XunitLoggerFactory(ITestOutputHelper testOutputHelper) : ILoggerFactory
 {
-    private readonly ITestOutputHelper _testOutputHelper;
-
-    public XunitLoggerFactory(ITestOutputHelper testOutputHelper)
-    {
-        _testOutputHelper = testOutputHelper;
-    }
-
     public void AddProvider(ILoggerProvider provider)
     {
         // Not supported, but no need to throw
@@ -19,7 +12,7 @@ public sealed class XunitLoggerFactory : ILoggerFactory
 
     public ILogger CreateLogger(string categoryName)
     {
-        return new XunitLogger(_testOutputHelper, categoryName);
+        return new XunitLogger(testOutputHelper, categoryName);
     }
 
     public void Dispose()
@@ -28,17 +21,8 @@ public sealed class XunitLoggerFactory : ILoggerFactory
     }
 }
 
-public class XunitLogger : ILogger
+public class XunitLogger(ITestOutputHelper testOutputHelper, string categoryName) : ILogger
 {
-    private readonly ITestOutputHelper _testOutputHelper;
-    private readonly string _categoryName;
-
-    public XunitLogger(ITestOutputHelper testOutputHelper, string categoryName)
-    {
-        _testOutputHelper = testOutputHelper;
-        _categoryName = categoryName;
-    }
-
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull
     {
         return NoopDisposable.Instance;
@@ -51,10 +35,10 @@ public class XunitLogger : ILogger
 
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        _testOutputHelper.WriteLine($"{_categoryName} [{eventId}] {formatter(state, exception)}");
+        testOutputHelper.WriteLine($"{categoryName} [{eventId}] {formatter(state, exception)}");
 
         if (exception != null)
-            _testOutputHelper.WriteLine(exception.ToString());
+            testOutputHelper.WriteLine(exception.ToString());
     }
 
     private sealed class NoopDisposable : IDisposable
@@ -66,4 +50,9 @@ public class XunitLogger : ILogger
             // Nothing to do here
         }
     }
+}
+
+public class XUnitLogger<T>(ITestOutputHelper helper) 
+    : XunitLogger(helper, typeof(T).FullName), ILogger<T> where T : class
+{
 }

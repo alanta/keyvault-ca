@@ -40,13 +40,12 @@ namespace KeyVaultCa.Core
             }
         }
 
-        public KeyVaultSignatureGenerator(Uri keyUri, TokenCredential credential, Oid signatureAlgorithmOid = null)
+        public KeyVaultSignatureGenerator(Func<Uri, CryptographyClient> cryptoClientFactory, Uri keyUri, Oid signatureAlgorithmOid = null)
         {
-            _client = new Lazy<CryptographyClient>(() => new CryptographyClient(keyUri, credential));
-            // Note: no support for DiffieHellman keys yet. 
+            _client = new Lazy<CryptographyClient>(() => cryptoClientFactory(keyUri));
             if (signatureAlgorithmOid.IsDiffieHellmanKey())
             {
-                throw new ArgumentOutOfRangeException("DiffieHellman keys are not supported");
+                throw new InvalidOperationException("DiffieHellman keys are not supported");
             }
             _generator = signatureAlgorithmOid.IsEllipticCurveKey() ? CreateForECDsa(new FakeECDsaKey()) : CreateForRSA(new FakeRsaKey(), RSASignaturePadding.Pkcs1);
             _isEcdsa = signatureAlgorithmOid.IsEllipticCurveKey();
