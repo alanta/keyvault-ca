@@ -2,24 +2,14 @@
 using FakeItEasy;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography;
-using Polly;
 
 namespace KeyVaultCA.Tests.KeyVault;
-
-public class CertificateVersion
-{
-    public string Name { get; set; }
-    public string Version { get; set; }
-    public CertificatePolicy Policy { get; set; }
-    public CertificateOperationProperties Properties { get; set; }
-    public byte[]? Certificate { get; set; }
-    public byte[]? CertSigningRequest { get; set; }
-    public bool HasCompleted => Certificate != null;
-}
 
 public class CertificateStore
 {
     private readonly List<CertificateVersion> _certificates = new();
+
+    public IReadOnlyList<CertificateVersion> CertificateVersions => _certificates;
 
     public CertificateOperation StartOperation(string name, CertificatePolicy policy)
     {

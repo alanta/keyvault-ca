@@ -6,6 +6,9 @@ using FluentAssertions;
 
 namespace KeyVaultCA.Tests.KeyVault;
 
+/// <summary>
+/// Verifies that the CertificateStore behaves as it should so we can use it to fake KeyVault.
+/// </summary>
 public class When_using_the_certificate_store
 {
     [Fact]

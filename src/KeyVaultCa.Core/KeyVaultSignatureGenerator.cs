@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using System.Threading;
-using Azure.Core;
 using Azure.Security.KeyVault.Keys.Cryptography;
 
 namespace KeyVaultCa.Core

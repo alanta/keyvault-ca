@@ -1,12 +1,10 @@
-﻿using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
+﻿using System.Security.Cryptography.X509Certificates;
 using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Keys.Cryptography;
 using FakeItEasy;
 using FluentAssertions;
 using KeyVaultCa.Core;
 using KeyVaultCA.Tests.Tools;
-using Microsoft.Identity.Client.Platforms.Features.DesktopOs.Kerberos;
 using Xunit.Abstractions;
 
 namespace KeyVaultCA.Tests.KeyVault;
@@ -18,11 +16,11 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
     {
         // Arrange
         var certName = Guid.NewGuid().ToString();
-        var certificateOperations = new CertificateStore();
+        var store = new CertificateStore();
         var certificateClient = A.Fake<CertificateClient>() // x => x.Strict()
-            .WithCreateCertificateBehavior(certificateOperations)
-            .WithMergeCertificateBehavior(certificateOperations)
-            .WithGetCertificateBehavior(certificateOperations);
+            .WithCreateCertificateBehavior(store)
+            .WithMergeCertificateBehavior(store)
+            .WithGetCertificateBehavior(store);
         
         
         var cryptographyClient = A.Fake<CryptographyClient>();
@@ -33,11 +31,13 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", 1, default);
 
         // Assert
-        var certificate = certificateOperations.GetCertificateByName("UnitTestCA");
+        var certificate = store.GetCertificateByName("UnitTestCA");
         var certBytes = certificate.Cer;
         certBytes.Should().NotBeNull();
         var cert = new X509Certificate2(certBytes);
         cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.Should().BeTrue();
+
+        store.CertificateVersions[1].Policy.ReuseKey.Should().BeTrue("CA root should reuse the key created for it in the first version.");
     }
 
     [Fact]
@@ -56,11 +56,12 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var kvServiceClient = new KeyVaultServiceClient(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceClient>(output));
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
-        await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", new CertificatePolicy("Unknown", "CN=test.local"));
+        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", 1, default);
+        
 
         // Act
-        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", 1, default);
-        var signedCert = await kvCertProvider.SignRequestAsync(
+        await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", new CertificatePolicy("Unknown", "CN=test.local"));
+        var signedCert = await kvServiceClient.SignRequestAsync(
             new Uri("https://localhost/certificate/UnitTestIntermediate"), 
             new Uri("http://localhost/certificates/UnitTestCA"), 
             30,
@@ -98,7 +99,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", 1, default);
         // setup intermediate cert
         await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", new CertificatePolicy("Unknown", "CN=intermediate.local"));
-        var signedCert = await kvCertProvider.SignRequestAsync(
+        var signedCert = await kvServiceClient.SignRequestAsync(
             new Uri("https://localhost/certificate/UnitTestIntermediate"), 
             new Uri("http://localhost/certificates/UnitTestCA"), 
             30,
@@ -118,7 +119,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         sans.UserPrincipalNames.Add("test@alanta.nl");
 
         await certificateClient.StartCreateCertificateAsync("LeafWithSAN", new CertificatePolicy("Unknown", "CN=test.local", sans ));
-        var signedCert2 = await kvCertProvider.SignRequestAsync(
+        var signedCert2 = await kvServiceClient.SignRequestAsync(
             new Uri("https://localhost/certificate/LeafWithSAN"),
             new Uri("http://localhost/certificates/UnitTestIntermediate"),
             30,

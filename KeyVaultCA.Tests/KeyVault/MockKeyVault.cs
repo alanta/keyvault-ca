@@ -6,6 +6,9 @@ using FakeItEasy;
 
 namespace KeyVaultCA.Tests.KeyVault;
 
+/// <summary>
+/// Helps setup the behavior of the KeyVault client to simulate the KeyVault service for testing.
+/// </summary>
 public static class MockKeyVault
 {
     public static CertificateClient WithMergeCertificateBehavior(this CertificateClient certificateClient, CertificateStore certificates)

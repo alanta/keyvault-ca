@@ -1,4 +1,3 @@
-using System.Runtime.Serialization;
 using System.Security.Cryptography;
 using Azure.Identity;
 using FluentAssertions;
@@ -10,14 +9,7 @@ using System.Security.Cryptography.X509Certificates;
 using Azure.Core;
 using Xunit.Abstractions;
 using Azure.Security.KeyVault.Certificates;
-using Microsoft.Identity.Client.Platforms.Features.DesktopOs.Kerberos;
-using Org.BouncyCastle.Asn1;
-using Org.BouncyCastle.Asn1.Pkcs;
-using Org.BouncyCastle.Asn1.X509;
-using Org.BouncyCastle.Pkcs;
-using System.Reflection.Emit;
 using Azure.Security.KeyVault.Keys.Cryptography;
-using Org.BouncyCastle.Asn1.Ocsp;
 
 namespace KeyVaultCA.Tests
 {
@@ -49,7 +41,7 @@ namespace KeyVaultCA.Tests
             _loggerFactory = new XunitLoggerFactory(output);
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task CreateCACertificate()
         {
             var certificateClient = new CertificateClient(new Uri(keyVaultUrl), credential);
@@ -59,7 +51,7 @@ namespace KeyVaultCA.Tests
             await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", 1, default);
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task Test1()
         {
             var issuerCertificateName = "alanta-local-intermediate";
@@ -70,9 +62,8 @@ namespace KeyVaultCA.Tests
 
             var certificateClient = new CertificateClient(new Uri(keyVaultUrl), credential);
             var kvServiceClient = new KeyVaultServiceClient(certificateClient, uri => new CryptographyClient(uri, credential), NullLoggerFactory.Instance.CreateLogger<KeyVaultServiceClient>());
-            var kvCertProvider = new KeyVaultCertificateProvider( kvServiceClient, _loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
 
-            var cert = await kvCertProvider.SignRequestAsync(
+            var cert = await kvServiceClient.SignRequestAsync(
                 pendingCertificateIdentifier.SourceId,
                 issuerCertificateIdentifier.SourceId, 
                 30, 
@@ -99,7 +90,7 @@ namespace KeyVaultCA.Tests
             var mergeResult = await csrKeyVault.MergeCertificateAsync(options);*/
         }
 
-        [Fact]
+        [Fact(Skip = "Integration test")]
         public async Task Test2()
         {
             var keyVaultUrl = "https://mvv-kv-ca.vault.azure.net/";
