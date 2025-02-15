@@ -75,7 +75,10 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var certBytes = certificate.Cer;
         certBytes.Should().NotBeNull();
         var cert = new X509Certificate2(certBytes);
-        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.Should().BeFalse();
+        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.Should().BeTrue("Intermediate certificate should be a CA certificate");
+        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().HasPathLengthConstraint.Should().BeTrue("Intermediate certificate should have a path length constraint");
+        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().PathLengthConstraint.Should().Be(0, "Intermediate certificate should have a path length constraint of 0");
+        // Check path length constraint
 
     }
 

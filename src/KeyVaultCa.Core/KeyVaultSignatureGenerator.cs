@@ -7,6 +7,9 @@ using Azure.Security.KeyVault.Keys.Cryptography;
 
 namespace KeyVaultCa.Core
 {
+    /// <summary>
+    /// An X509SignatureGenerator that uses Azure Key Vault to sign data.
+    /// </summary>
     public class KeyVaultSignatureGenerator : X509SignatureGenerator
     {
         private readonly Lazy<CryptographyClient> _client;
@@ -39,7 +42,7 @@ namespace KeyVaultCa.Core
             }
         }
 
-        public KeyVaultSignatureGenerator(Func<Uri, CryptographyClient> cryptoClientFactory, Uri keyUri, Oid signatureAlgorithmOid = null)
+        public KeyVaultSignatureGenerator(Func<Uri, CryptographyClient> cryptoClientFactory, Uri keyUri, Oid? signatureAlgorithmOid = null)
         {
             _client = new Lazy<CryptographyClient>(() => cryptoClientFactory(keyUri));
             if (signatureAlgorithmOid.IsDiffieHellmanKey())
@@ -113,9 +116,9 @@ namespace KeyVaultCa.Core
                     throw new ArgumentOutOfRangeException(nameof(hashAlgorithm), "The hash algorithm " + hashAlgorithm.Name + " is not supported.");
             }
             
-            SignResult result = null;
+            /*SignResult result = null;
 
-            /*Random jitterer = new();
+            Random jitterer = new();
 
             var retryPolicy = await Policy
               .Handle<Exception>() // etc
@@ -126,7 +129,7 @@ namespace KeyVaultCa.Core
                   result = ;
               });*/
 
-            result = await _client.Value.SignAsync(algorithm, digest, ct).ConfigureAwait(false);
+            SignResult result = await _client.Value.SignAsync(algorithm, digest, ct).ConfigureAwait(false);
 
             return result.Signature;
         }

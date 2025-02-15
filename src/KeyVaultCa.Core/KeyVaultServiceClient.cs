@@ -60,7 +60,7 @@ namespace KeyVaultCa.Core
                 // intentionally ignore errors 
             }
 
-            string caTempCertIdentifier = null;
+            string? caTempCertIdentifier = null;
 
             try
             {
@@ -157,9 +157,10 @@ namespace KeyVaultCa.Core
                         certificateProperties.Enabled = false;
                         await _certificateClient.UpdateCertificatePropertiesAsync(certificateProperties, ct);
                     }
-                    catch
+                    catch(Exception ex)
                     {
                         // intentionally ignore error
+                        _logger.LogError(ex, "Failed to disable temporary certificate.");
                     }
                 }
             }
@@ -187,7 +188,7 @@ namespace KeyVaultCa.Core
         {
             var versions = 0;
             await foreach (CertificateProperties cert in _certificateClient.GetPropertiesOfCertificateVersionsAsync(
-                               certName, ct))
+                               certName, ct).ConfigureAwait(false))
             {
                 versions++;
             }

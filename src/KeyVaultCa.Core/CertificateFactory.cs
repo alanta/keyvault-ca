@@ -9,25 +9,30 @@ namespace KeyVaultCa.Core
 {
     public static class CertificateFactory
     {
+        public const string AuthorityKeyIdentifierOid = "2.5.29.35";
         public const int SerialNumberLength = 20;
-        public const int DefaultKeySize = 2048;
 
+        /// <summary>
+        /// Signs a certificate request using an issuer certificate.
+        /// </summary>
+        /// <param name="csr">The certificate signing request.</param>
+        /// <param name="issuerCert">The issuer certificate.</param>
+        /// <param name="generator">The signature generator.</param>
+        /// <param name="validityInDays">The number of days the certificate should be valid.</param>
+        /// <param name="hashAlgorithm">Optional. The hashing algorithm. Defaults tp SHA256</param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentNullException"></exception>
+        /// <exception cref="ArgumentException"></exception>
+        /// <exception cref="NotSupportedException"></exception>
         public static Task<X509Certificate2> SignRequest(byte[] csr, X509Certificate2 issuerCert,
             X509SignatureGenerator generator, int validityInDays, HashAlgorithmName? hashAlgorithm = null)
         {
-            if (csr == null)
-            {
-                throw new ArgumentNullException(nameof(csr));
-            }
-
-            if (issuerCert == null)
-            {
-                throw new ArgumentNullException(nameof(issuerCert));
-            }
+            ArgumentNullException.ThrowIfNull(csr);
+            ArgumentNullException.ThrowIfNull(issuerCert);
 
             if (validityInDays <= 0)
             {
-                throw new ArgumentException("validityInDays must be greater than 0");
+                throw new ArgumentException("validityInDays must be greater than 0", nameof(validityInDays));
             }
 
             var request = CertificateRequest.LoadSigningRequest(csr, hashAlgorithm ?? HashAlgorithmName.SHA256,
@@ -37,35 +42,34 @@ namespace KeyVaultCa.Core
                 .SelectMany(x => x.EnumerateDnsNames()).ToArray();
             // TODO : verify subject alternative names are allowed
 
-            var basicConstraints =
-                request.CertificateExtensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
+            // Verify base constraints
+            var basicConstraints = request.CertificateExtensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
             if (basicConstraints == null)
             {
-                request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+                basicConstraints = new X509BasicConstraintsExtension(false, false, 0, true);
+                request.CertificateExtensions.Add(basicConstraints);
             }
             else
             {
                 // make sure it's not a CA cert
                 if (basicConstraints.CertificateAuthority)
                 {
-                    throw new NotSupportedException("Cannot issue a CA certificate.");
+                    throw new InvalidOperationException("Cannot issue a CA certificate as a child certificate.");
                 }
             }
 
+            if (basicConstraints.CertificateAuthority)
+            {
+                VerifyPathLengthConstraint(basicConstraints, issuerCert);
+            }
 
-            var defaultFlags = X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment;
             var keyUsage = request.CertificateExtensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
             if (keyUsage == null)
             {
-                request.CertificateExtensions.Add(new X509KeyUsageExtension(defaultFlags, true));
+                request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment, true));
             }
-            else
-            {
-
-            }
-
-            var enhancedKeyUsage =
-                request.CertificateExtensions.OfType<X509EnhancedKeyUsageExtension>().FirstOrDefault();
+            
+            var enhancedKeyUsage = request.CertificateExtensions.OfType<X509EnhancedKeyUsageExtension>().FirstOrDefault();
             if (enhancedKeyUsage == null)
             {
                 // Enhanced key usage
@@ -77,7 +81,13 @@ namespace KeyVaultCa.Core
                             new Oid("1.3.6.1.5.5.7.3.2") }, // clientAuth
                         true));
             }
-       
+            
+            var authorityKeyIdentifier = request.CertificateExtensions.FirstOrDefault(ext => ext.Oid?.Value == AuthorityKeyIdentifierOid);
+            if(authorityKeyIdentifier == null)
+            {
+                request.CertificateExtensions.Add(BuildAuthorityKeyIdentifier(issuerCert));
+            }
+
             var serialNumber = GenerateSerialNumber();
             var notBefore = DateTime.UtcNow.AddDays(-1);
             var notAfter = notBefore.AddDays(validityInDays);
@@ -100,6 +110,28 @@ namespace KeyVaultCa.Core
             );
 
             return Task.FromResult(signedCert);
+        }
+
+        private static void VerifyPathLengthConstraint(X509BasicConstraintsExtension basicConstraints, X509Certificate2 issuerCert)
+        {
+            var issuerBasicConstraints = issuerCert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
+            if (issuerBasicConstraints is { HasPathLengthConstraint: true, PathLengthConstraint: <= 0 })
+            {
+                throw new InvalidOperationException("Path length constraint on the issuing certificate does not allow it to issue an intermediate CA certificate.");
+            }
+            
+            // Verify path length constraint
+            if (basicConstraints.HasPathLengthConstraint)
+            {
+                if (issuerBasicConstraints is { HasPathLengthConstraint: true, PathLengthConstraint: var pathLength } 
+                    && basicConstraints.PathLengthConstraint > pathLength)
+                {
+                    throw new InvalidOperationException(
+                        $"Path length constraint on the issuing certificate does not allow it to issue an intermediate certificate with the desired path length of {pathLength}.");
+                }
+            }
+            
+            // TODO: verify the actual length of the chain 
         }
 
         /// <summary>
@@ -163,7 +195,7 @@ namespace KeyVaultCa.Core
         private static byte[] GenerateSerialNumber()
         {
             byte[] serialNumber = new byte[SerialNumberLength];
-            RandomNumberGenerator.Fill(serialNumber); // yikes... should be using a crypto RNG?
+            RandomNumberGenerator.Fill(serialNumber);
             serialNumber[0] &= 0x7F;
             return serialNumber;
         }
@@ -225,14 +257,14 @@ namespace KeyVaultCa.Core
         private static X509Extension BuildAuthorityKeyIdentifier(
             X500DistinguishedName issuerName,
             byte[] issuerSerialNumber,
-            X509SubjectKeyIdentifierExtension ski
+            X509SubjectKeyIdentifierExtension? ski
             )
         {
             AsnWriter writer = new AsnWriter(AsnEncodingRules.DER);
             {
                 writer.PushSequence();
 
-                if (ski != null)
+                if (ski is { SubjectKeyIdentifier: not null })
                 {
                     Asn1Tag keyIdTag = new Asn1Tag(TagClass.ContextSpecific, 0);
                     writer.WriteOctetString(HexToByteArray(ski.SubjectKeyIdentifier), keyIdTag);
@@ -254,7 +286,7 @@ namespace KeyVaultCa.Core
                 writer.WriteInteger(issuerSerial, issuerSerialTag);
 
                 writer.PopSequence();
-                return new X509Extension("2.5.29.35", writer.Encode(), false);
+                return new X509Extension(AuthorityKeyIdentifierOid, writer.Encode(), false);
             }
         }
     }

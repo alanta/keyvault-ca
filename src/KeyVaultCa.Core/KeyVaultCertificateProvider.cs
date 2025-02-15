@@ -24,7 +24,7 @@ namespace KeyVaultCa.Core
 
             if (certVersions != 0)
             {
-                _logger.LogInformation("A certificate with the specified issuer name {name} already exists.", issuerCertificateName);
+                _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", issuerCertificateName);
             }
             else
             {
@@ -45,13 +45,21 @@ namespace KeyVaultCa.Core
         
         public async Task IssueCertificate(string issuerCertificateName, string certificateName, string subject, int validityInDays, CancellationToken ct)
         {
-            var certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(certificateName, ct).ConfigureAwait(false);
-
-            if (certVersions != 0)
+            try
             {
-                _logger.LogInformation("A certificate with the specified issuer name {name} already exists.", certificateName);
+                var certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(certificateName, ct).ConfigureAwait(false);
+                if (certVersions != 0)
+                {
+                    _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", certificateName);
+                    
+                }
             }
-
+            catch (Azure.RequestFailedException requestEx)
+            {
+                _logger.LogError(requestEx.Message);
+                return;
+            }
+            
             var sans = new SubjectAlternativeNames();
             sans.DnsNames.Add($"{certificateName}");
             //sans.Emails.Add("postmaster@alanta.local");
@@ -65,7 +73,5 @@ namespace KeyVaultCa.Core
                 sans,
                 ct);
         }
-
-        
     }
 }

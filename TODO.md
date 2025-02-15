@@ -34,6 +34,10 @@ The core library has most of the required functionality:
   * Revoke cert
   * Specify key parameters (key size, key type)
   * Specify cert parameters (subject, validity, SAN)
+  * Support PKCS12 format (.pfx)
+  * Support PKCS8 / PEM format (.pem, .crt and ,key)
+  * Support DER format (.der, .crt and .key)
+
 * Add auto-renewal worker for containerized deployment
 
 * Handle certificate chain
