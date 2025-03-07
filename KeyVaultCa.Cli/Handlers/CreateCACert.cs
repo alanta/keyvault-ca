@@ -47,7 +47,7 @@ public class CreateCACert(ILoggerFactory _loggerFactory)
         cmd.OnExecuteAsync(async cancellationToken =>
         {
             var handler = new CreateCACert(CliApp.ServiceProvider.GetRequiredService<ILoggerFactory>());
-            await handler.Execute(kvOption.Value(), nameArgument.Value, commonNameOption.Value(), cancellationToken);
+            await handler.Execute(kvOption.Value()!, nameArgument.Value!, commonNameOption.Value(), cancellationToken);
         });
     }
 }

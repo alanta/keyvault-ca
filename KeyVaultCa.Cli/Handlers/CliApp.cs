@@ -1,7 +1,5 @@
 using System.Reflection;
 using McMaster.Extensions.CommandLineUtils;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace KeyVaultCa.Cli.Handlers;
 
@@ -11,7 +9,7 @@ public class CliApp
     
     public static void Configure(CommandLineApplication app)
     {
-        app.Name = "keyvault-ca";
+        app.Name = "keyvaultca";
         app.Description = "A tool for managing a certificate authority in Azure Key Vault";
         app.HelpOption(inherited: true);
         app.Command("create-ca-cert", cfg => CreateCACert.Configure(cfg));

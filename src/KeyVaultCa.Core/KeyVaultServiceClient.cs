@@ -1,8 +1,3 @@
-// ------------------------------------------------------------
-//  Copyright (c) Microsoft Corporation.  All rights reserved.
-//  Licensed under the MIT License (MIT). See License.txt in the repo root for license information.
-// ------------------------------------------------------------
-
 using Azure;
 using Azure.Security.KeyVault.Certificates;
 using Microsoft.Extensions.Logging;
@@ -175,6 +170,12 @@ namespace KeyVaultCa.Core
             return await _certificateClient.GetCertificateAsync(certName, ct).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Get the certificate signing request from the Key Vault.
+        /// </summary>
+        /// <param name="certName">The name of the certificate.</param>
+        /// <param name="ct">A cancellation token.</param>
+        /// <returns>A certificate opertion.</returns>
         public async Task<CertificateOperation> GetCertificateSigningRequestAsync(string certName,
             CancellationToken ct = default)
         {

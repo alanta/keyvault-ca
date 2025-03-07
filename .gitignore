@@ -447,8 +447,8 @@ $RECYCLE.BIN/
 
 # Project specific
 *.key
-/ca/secrets/
 *.crt
 *.pem
 *.cer
 *.csr
+*.ncrunch*
