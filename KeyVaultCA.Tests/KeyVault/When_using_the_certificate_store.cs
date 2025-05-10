@@ -24,7 +24,7 @@ public class When_using_the_certificate_store
         // Assert
         var operation2 = certStore.GetCertificateOperationById(operation.Id);
         operation2.Should().NotBeNull();
-        operation2.HasCompleted.Should().BeFalse();
+        operation2!.HasCompleted.Should().BeFalse();
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public class When_using_the_certificate_store
         // Assert
         var operation2 = certStore.GetCertificateOperationById(operation.Id);
         operation2.Should().NotBeNull();
-        operation2.HasCompleted.Should().BeTrue();
+        operation2!.HasCompleted.Should().BeTrue();
         operation2.Value.Cer.Should().BeEquivalentTo(cert.RawData);
     }
 }

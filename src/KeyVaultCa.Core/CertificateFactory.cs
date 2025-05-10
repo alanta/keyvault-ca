@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Formats.Asn1;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace KeyVaultCa.Core
@@ -20,12 +23,16 @@ namespace KeyVaultCa.Core
         /// <param name="generator">The signature generator.</param>
         /// <param name="validityInDays">The number of days the certificate should be valid.</param>
         /// <param name="hashAlgorithm">Optional. The hashing algorithm. Defaults tp SHA256</param>
+        /// <param name="extensions">Optional. Aditional extension for the certificate. These extensions will replace
+        /// extensions with the same OID in the CSR.</param>
         /// <returns></returns>
         /// <exception cref="ArgumentNullException"></exception>
         /// <exception cref="ArgumentException"></exception>
         /// <exception cref="NotSupportedException"></exception>
         public static Task<X509Certificate2> SignRequest(byte[] csr, X509Certificate2 issuerCert,
-            X509SignatureGenerator generator, int validityInDays, HashAlgorithmName? hashAlgorithm = null)
+            X509SignatureGenerator generator, int validityInDays, HashAlgorithmName? hashAlgorithm = null,
+            IReadOnlyList<X509Extension>? extensions = null,
+            CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(csr);
             ArgumentNullException.ThrowIfNull(issuerCert);
@@ -37,6 +44,9 @@ namespace KeyVaultCa.Core
 
             var request = CertificateRequest.LoadSigningRequest(csr, hashAlgorithm ?? HashAlgorithmName.SHA256,
                 CertificateRequestLoadOptions.UnsafeLoadCertificateExtensions, RSASignaturePadding.Pkcs1);
+            
+            // Merge extensions
+            if (extensions != null) MergeExtensions(request.CertificateExtensions, extensions);
 
             var alternativeDNSNames = request.CertificateExtensions.OfType<X509SubjectAlternativeNameExtension>()
                 .SelectMany(x => x.EnumerateDnsNames()).ToArray();
@@ -49,19 +59,7 @@ namespace KeyVaultCa.Core
                 basicConstraints = new X509BasicConstraintsExtension(false, false, 0, true);
                 request.CertificateExtensions.Add(basicConstraints);
             }
-            else
-            {
-                // make sure it's not a CA cert
-                if (basicConstraints.CertificateAuthority)
-                {
-                    throw new InvalidOperationException("Cannot issue a CA certificate as a child certificate.");
-                }
-            }
-
-            if (basicConstraints.CertificateAuthority)
-            {
-                VerifyPathLengthConstraint(basicConstraints, issuerCert);
-            }
+            VerifyPathLengthConstraint(basicConstraints, issuerCert);
 
             var keyUsage = request.CertificateExtensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
             if (keyUsage == null)
@@ -82,6 +80,14 @@ namespace KeyVaultCa.Core
                         true));
             }
             
+            // Subject Key Identifier
+            var ski = new X509SubjectKeyIdentifierExtension(
+                request.PublicKey,
+                X509SubjectKeyIdentifierHashAlgorithm.Sha1,
+                false);
+            request.CertificateExtensions.Add(ski);
+            
+            // Authority Key Identifier
             var authorityKeyIdentifier = request.CertificateExtensions.FirstOrDefault(ext => ext.Oid?.Value == AuthorityKeyIdentifierOid);
             if(authorityKeyIdentifier == null)
             {
@@ -112,22 +118,51 @@ namespace KeyVaultCa.Core
             return Task.FromResult(signedCert);
         }
 
+        /// <summary>
+        /// Merge extensions by replacing any extension in the request of the same OID with the new extensions.
+        /// If no exisitng extension is found, the new extension is added to the request.
+        /// </summary>
+        /// <param name="request">The collection to update.</param>
+        /// <param name="extensions">The extensions to merge in.</param>
+        public static void MergeExtensions(Collection<X509Extension> request, IReadOnlyList<X509Extension> extensions)
+        {
+            if (extensions.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var extension in extensions)
+            {
+                var existingExtension = request.FirstOrDefault(x => x.Oid?.Value == extension.Oid?.Value);
+                if (existingExtension != null)
+                {
+                    request.Remove(existingExtension);
+                }
+                request.Add(extension);
+            }
+        }
+
         private static void VerifyPathLengthConstraint(X509BasicConstraintsExtension basicConstraints, X509Certificate2 issuerCert)
         {
             var issuerBasicConstraints = issuerCert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
-            if (issuerBasicConstraints is { HasPathLengthConstraint: true, PathLengthConstraint: <= 0 })
+            if( issuerBasicConstraints == null)
             {
-                throw new InvalidOperationException("Path length constraint on the issuing certificate does not allow it to issue an intermediate CA certificate.");
+                throw new NotSupportedException("Issuer certificate does not have basic constraints.");
             }
-            
-            // Verify path length constraint
-            if (basicConstraints.HasPathLengthConstraint)
+            if( !issuerBasicConstraints.CertificateAuthority )
             {
-                if (issuerBasicConstraints is { HasPathLengthConstraint: true, PathLengthConstraint: var pathLength } 
-                    && basicConstraints.PathLengthConstraint > pathLength)
+                throw new NotSupportedException("Issuer certificate is not a CA certificate.");
+            }
+            if (basicConstraints.CertificateAuthority && issuerBasicConstraints is { HasPathLengthConstraint: true })
+            {
+                if( issuerBasicConstraints.PathLengthConstraint <= 0)
+                {
+                    throw new InvalidOperationException("Path length constraint on the issuing certificate does not allow it to issue a CA certificate.");
+                }
+                if (basicConstraints.HasPathLengthConstraint && basicConstraints.PathLengthConstraint >= issuerBasicConstraints.PathLengthConstraint)
                 {
                     throw new InvalidOperationException(
-                        $"Path length constraint on the issuing certificate does not allow it to issue an intermediate certificate with the desired path length of {pathLength}.");
+                        $"Path length constraint on the issuing certificate does not allow it to issue a CA certificate with the desired path length of {basicConstraints.PathLengthConstraint}.");
                 }
             }
             

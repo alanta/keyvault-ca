@@ -48,7 +48,7 @@ namespace KeyVaultCA.Tests
             var kvServiceClient = new KeyVaultServiceClient(certificateClient, uri => new CryptographyClient(uri, credential), _loggerFactory.CreateLogger<KeyVaultServiceClient>());
             var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, _loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
 
-            await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", 1, default);
+            await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow, DateTime.UtcNow.AddDays(30), 1, default);
         }
 
         [Fact(Skip = "Integration test")]

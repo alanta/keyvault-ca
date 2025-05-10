@@ -40,7 +40,7 @@ namespace KeyVaultCa.Core
             DateTime notAfter,
             int keySize,
             HashAlgorithmName hashAlgorithm,
-            int? certPathLength = 1,
+            int? certPathLength,
             CancellationToken ct = default)
         {
             try
@@ -242,7 +242,9 @@ namespace KeyVaultCa.Core
             Uri issuerCertificateUri,
             int validityInDays,
             Func<Uri, CertificateClient> keyVaultClientFactory,
-            Func<Uri, CryptographyClient> cryptoClientFactory)
+            Func<Uri, CryptographyClient> cryptoClientFactory,
+            IReadOnlyList<X509Extension>? extensions = null,
+            CancellationToken ct = default)
         {
             if (!KeyVaultCertificateIdentifier.TryCreate(certificateUri, out var csrCertificateIdentifier))
             {
@@ -305,7 +307,8 @@ namespace KeyVaultCa.Core
                 new KeyVaultSignatureGenerator(cryptoClientFactory, certBundle.Value.KeyId,
                     signingCert.SignatureAlgorithm),
                 validityInDays,
-                HashAlgorithmName.SHA256);
+                HashAlgorithmName.SHA256,
+                extensions);
         }
 
         public async Task IssueCertificateAsync(

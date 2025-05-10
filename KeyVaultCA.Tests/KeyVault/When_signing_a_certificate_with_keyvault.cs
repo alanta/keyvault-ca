@@ -28,7 +28,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
         // Act
-        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", 1, default);
+        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow, DateTime.UtcNow.AddDays(30),1, default);
 
         // Assert
         var certificate = store.GetCertificateByName("UnitTestCA");
@@ -56,17 +56,25 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var kvServiceClient = new KeyVaultServiceClient(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceClient>(output));
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
-        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", 1, default);
+        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow.AddDays(-1),  DateTime.UtcNow.AddDays(30), 1, default);
         
 
         // Act
-        await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", new CertificatePolicy("Unknown", "CN=test.local"));
+        var policy = new CertificatePolicy("Unknown", "CN=test.local");
+        await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", policy);
+        // Override basic constraints to produce an intermediate certificate
+        List<X509Extension> extensions = [new X509BasicConstraintsExtension(true, true, 0, true)];
         var signedCert = await kvServiceClient.SignRequestAsync(
             new Uri("https://localhost/certificate/UnitTestIntermediate"), 
             new Uri("http://localhost/certificates/UnitTestCA"), 
             30,
             uri => certificateClient,
-            uri => cryptographyClient) ;
+            uri => cryptographyClient,
+            extensions,
+            default) ;
+        
+        // TODO : Pass in extensions to override the default ones
+        
 
         await certificateClient.MergeCertificateAsync(new MergeCertificateOptions("UnitTestIntermediate", [signedCert.RawData]), default);
 
@@ -78,8 +86,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.Should().BeTrue("Intermediate certificate should be a CA certificate");
         cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().HasPathLengthConstraint.Should().BeTrue("Intermediate certificate should have a path length constraint");
         cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().PathLengthConstraint.Should().Be(0, "Intermediate certificate should have a path length constraint of 0");
-        // Check path length constraint
-
+        cert.Extensions.OfType<X509SubjectKeyIdentifierExtension>().FirstOrDefault().Should().NotBeNull("Intermediate certificate should have a subject key identifier");
     }
 
     [Fact]
@@ -99,7 +106,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
         // Setup CA cert
-        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", 1, default);
+        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow.AddDays(-1),  DateTime.UtcNow.AddDays(30), 1, default);
         // setup intermediate cert
         await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", new CertificatePolicy("Unknown", "CN=intermediate.local"));
         var signedCert = await kvServiceClient.SignRequestAsync(
@@ -109,7 +116,8 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
             uri => certificateClient,
             uri => cryptographyClient);
 
-        await certificateClient.MergeCertificateAsync(new MergeCertificateOptions("UnitTestIntermediate", [signedCert.RawData]), default);
+        var result = await certificateClient.MergeCertificateAsync(new MergeCertificateOptions("UnitTestIntermediate", [signedCert.RawData]), default);
+        
         
 
         // Act

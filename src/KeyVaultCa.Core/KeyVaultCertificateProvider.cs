@@ -18,7 +18,7 @@ namespace KeyVaultCa.Core
             _logger = logger;
         }
 
-        public async Task CreateCACertificateAsync(string issuerCertificateName, string subject, int certPathLength, CancellationToken ct)
+        public async Task CreateCACertificateAsync(string issuerCertificateName, string subject, DateTime notBefore, DateTime notAfter, int certPathLength, CancellationToken ct)
         {
             var certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(issuerCertificateName, ct).ConfigureAwait(false);
 
@@ -29,12 +29,12 @@ namespace KeyVaultCa.Core
             else
             {
                 _logger.LogInformation("No existing certificate found, starting to create a new one.");
-                var notBefore = DateTime.UtcNow.AddDays(-1);
+                
                 await _keyVaultServiceClient.CreateCACertificateAsync(
                         issuerCertificateName,
                         subject,
                         notBefore,
-                        notBefore.AddMonths(48),
+                        notAfter,
                         4096,
                         HashAlgorithmName.SHA256,
                         certPathLength,

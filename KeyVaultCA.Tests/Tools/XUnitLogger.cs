@@ -53,6 +53,6 @@ public class XunitLogger(ITestOutputHelper testOutputHelper, string categoryName
 }
 
 public class XUnitLogger<T>(ITestOutputHelper helper) 
-    : XunitLogger(helper, typeof(T).FullName), ILogger<T> where T : class
+    : XunitLogger(helper, typeof(T).FullName!), ILogger<T> where T : class
 {
 }

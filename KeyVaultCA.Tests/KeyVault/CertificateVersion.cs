@@ -4,10 +4,10 @@ namespace KeyVaultCA.Tests.KeyVault;
 
 public class CertificateVersion
 {
-    public string Name { get; set; }
-    public string Version { get; set; }
-    public CertificatePolicy Policy { get; set; }
-    public CertificateOperationProperties Properties { get; set; }
+    public required string Name { get; init; }
+    public required string Version { get; init; }
+    public required CertificatePolicy Policy { get; init; }
+    public CertificateOperationProperties? Properties { get; set; }
     public byte[]? Certificate { get; set; }
     public byte[]? CertSigningRequest { get; set; }
     public bool HasCompleted => Certificate != null;
