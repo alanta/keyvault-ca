@@ -12,9 +12,10 @@ public class CliApp
         app.Name = "keyvaultca";
         app.Description = "A tool for managing a certificate authority in Azure Key Vault";
         app.HelpOption(inherited: true);
-        app.Command("create-ca-cert", cfg => CreateCACert.Configure(cfg));
-        app.Command("issue-cert", cfg => IssueCert.Configure(cfg));
-        app.Command("download-cert", cfg => DownloadCert.Configure(cfg));
+        app.Command("create-ca-cert", CreateCACert.Configure);
+        app.Command("issue-intermediate-cert", IssueIntermediateCert.Configure);
+        app.Command("issue-cert", IssueCert.Configure);
+        app.Command("download-cert", DownloadCert.Configure);
         app.OnExecute(() =>
         {
             app.ShowHelp();

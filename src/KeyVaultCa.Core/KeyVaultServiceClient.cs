@@ -221,7 +221,6 @@ namespace KeyVaultCa.Core
             var issuerName = selfSigned ? "Self" : "Unknown";
             var policy = new CertificatePolicy(issuerName, subject)
             {
-
                 Exportable = exportable,
                 KeySize = keySize,
                 KeyType = keyType,
@@ -315,6 +314,42 @@ namespace KeyVaultCa.Core
                 ct);
         }
 
+        public static class WellKnownOids
+        {
+            public static class ExtendedKeyUsages
+            {
+                public const string ServerAuth = "1.3.6.1.5.5.7.3.1";
+                public const string ClientAuth = "1.3.6.1.5.5.7.3.2";
+            }
+        }
+
+        public async Task IssueIntermediateCertificateAsync(
+            string issuerCertificateName, 
+            string certificateName, 
+            string subject, 
+            DateTimeOffset notBefore,
+            DateTimeOffset notAfter,
+            SubjectAlternativeNames sans,
+            int? pathLength,
+            CancellationToken ct)
+        {
+            await _certificateClient.StartCreateCertificateAsync(certificateName, new CertificatePolicy("Unknown", subject, sans ), cancellationToken: ct);
+            var signedCert2 = await SignRequestAsync(
+                new Uri($"{_certificateClient.VaultUri}certificates/{certificateName}"),
+                new Uri($"{_certificateClient.VaultUri}certificates/{issuerCertificateName}"),
+                notBefore,
+                notAfter,
+                uri => _certificateClient, // WARNING : Assuming the same keyvault for now
+                _cryptoClientFactory,
+                extensions: [
+                    new X509BasicConstraintsExtension(true, pathLength.HasValue, pathLength ?? 0, true),
+                    new X509KeyUsageExtension(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.DigitalSignature, true),
+                    new X509EnhancedKeyUsageExtension{EnhancedKeyUsages = { new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth)}}
+                ],
+                ct);
+            await _certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificateName, new []{signedCert2.RawData}), default);
+        }
+
         public async Task IssueCertificateAsync(
             string issuerCertificateName, 
             string certificateName, 
@@ -332,7 +367,11 @@ namespace KeyVaultCa.Core
                 notAfter,
                 uri => _certificateClient, // WARNING : Assuming the same keyvault for now
                 _cryptoClientFactory,
-                extensions: null,
+                extensions: [
+                    new X509BasicConstraintsExtension(false, false, 0, true),
+                    new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true),
+                    new X509EnhancedKeyUsageExtension{EnhancedKeyUsages = { new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth)}}
+                ],
                 ct);
             await _certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificateName, new []{signedCert2.RawData}), default);
         }
