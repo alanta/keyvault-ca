@@ -7,31 +7,32 @@ using Azure.Security.KeyVault.Certificates;
 
 namespace KeyVaultCa.Core
 {
-    public class KeyVaultCertificateProvider
+    
+    /// <summary>
+    /// High-level API for creating and issuing certificates using Azure Key Vault.
+    /// </summary>
+    /// <param name="keyVaultServiceOrchestrator"></param>
+    /// <param name="logger"></param>
+    public class KeyVaultCertificateProvider(
+        KeyVaultServiceOrchestrator keyVaultServiceOrchestrator,
+        ILogger<KeyVaultCertificateProvider> logger)
     {
-        private readonly KeyVaultServiceClient _keyVaultServiceClient;
-        private readonly ILogger _logger;
+        private readonly ILogger _logger = logger;
 
-        public KeyVaultCertificateProvider(KeyVaultServiceClient keyVaultServiceClient, ILogger<KeyVaultCertificateProvider> logger)
+        public async Task CreateCACertificateAsync(string certificateName, string subject, DateTimeOffset notBefore, DateTimeOffset notAfter, int certPathLength, CancellationToken ct)
         {
-            _keyVaultServiceClient = keyVaultServiceClient;
-            _logger = logger;
-        }
-
-        public async Task CreateCACertificateAsync(string issuerCertificateName, string subject, DateTime notBefore, DateTime notAfter, int certPathLength, CancellationToken ct)
-        {
-            var certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(issuerCertificateName, ct).ConfigureAwait(false);
+            var certVersions = await keyVaultServiceOrchestrator.GetCertificateVersionsAsync(certificateName, ct).ConfigureAwait(false);
 
             if (certVersions != 0)
             {
-                _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", issuerCertificateName);
+                _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", certificateName);
             }
             else
             {
                 _logger.LogInformation("No existing certificate found, starting to create a new one.");
                 
-                await _keyVaultServiceClient.CreateCACertificateAsync(
-                        issuerCertificateName,
+                await keyVaultServiceOrchestrator.CreateRootCertificateAsync(
+                        certificateName,
                         subject,
                         notBefore,
                         notAfter,
@@ -39,15 +40,15 @@ namespace KeyVaultCa.Core
                         HashAlgorithmName.SHA256,
                         certPathLength,
                         ct);
-                _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created succsessfully.", issuerCertificateName, certPathLength);
+                _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created successfully.", certificateName, certPathLength);
             }
         }
         
-        public async Task IssueCertificate(string issuerCertificateName, string certificateName, string subject, int validityInDays, CancellationToken ct)
+        public async Task IssueCertificate(string issuerCertificateName, string certificateName, string subject, DateTimeOffset notBefore, DateTimeOffset notAfter, CancellationToken ct)
         {
             try
             {
-                var certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(certificateName, ct).ConfigureAwait(false);
+                var certVersions = await keyVaultServiceOrchestrator.GetCertificateVersionsAsync(certificateName, ct).ConfigureAwait(false);
                 if (certVersions != 0)
                 {
                     _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", certificateName);
@@ -65,11 +66,12 @@ namespace KeyVaultCa.Core
             //sans.Emails.Add("postmaster@alanta.local");
             //sans.UserPrincipalNames.Add("test@alanta.nl");
 
-            await _keyVaultServiceClient.IssueCertificateAsync(
+            await keyVaultServiceOrchestrator.IssueCertificateAsync(
                 issuerCertificateName,
                 certificateName,
                 subject,
-                validityInDays,
+                notBefore,
+                notAfter,
                 sans,
                 ct);
         }

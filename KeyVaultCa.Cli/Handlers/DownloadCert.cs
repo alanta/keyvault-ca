@@ -55,7 +55,7 @@ public class DownloadCert(ILoggerFactory loggerFactory)
         cmd.OnExecuteAsync(async cancellationToken =>
         {
             var handler = new DownloadCert(CliApp.ServiceProvider.GetRequiredService<ILoggerFactory>());
-            await handler.Execute(kvOption.Value(), nameArgument.Value, keyOption.HasValue(), cancellationToken);
+            await handler.Execute(kvOption.Value()!, nameArgument.Value!, keyOption.HasValue(), cancellationToken);
         });
     }
 }

@@ -45,7 +45,7 @@ namespace KeyVaultCA.Tests
         public async Task CreateCACertificate()
         {
             var certificateClient = new CertificateClient(new Uri(keyVaultUrl), credential);
-            var kvServiceClient = new KeyVaultServiceClient(certificateClient, uri => new CryptographyClient(uri, credential), _loggerFactory.CreateLogger<KeyVaultServiceClient>());
+            var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient, uri => new CryptographyClient(uri, credential), _loggerFactory.CreateLogger<KeyVaultServiceOrchestrator>());
             var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, _loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
 
             await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow, DateTime.UtcNow.AddDays(30), 1, default);
@@ -61,12 +61,13 @@ namespace KeyVaultCA.Tests
             var issuerCertificateIdentifier = new KeyVaultCertificateIdentifier(new Uri($"{keyVaultUrl}certificates/{issuerCertificateName}"));
 
             var certificateClient = new CertificateClient(new Uri(keyVaultUrl), credential);
-            var kvServiceClient = new KeyVaultServiceClient(certificateClient, uri => new CryptographyClient(uri, credential), NullLoggerFactory.Instance.CreateLogger<KeyVaultServiceClient>());
+            var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient, uri => new CryptographyClient(uri, credential), NullLoggerFactory.Instance.CreateLogger<KeyVaultServiceOrchestrator>());
 
             var cert = await kvServiceClient.SignRequestAsync(
                 pendingCertificateIdentifier.SourceId,
                 issuerCertificateIdentifier.SourceId, 
-                30, 
+                DateTimeOffset.UtcNow.Date,
+                DateTimeOffset.UtcNow.Date.AddDays(30), 
                 uri => new CertificateClient(uri, credential),
                 uri => new CryptographyClient(uri, credential));
 
@@ -101,12 +102,12 @@ namespace KeyVaultCA.Tests
             
             var operation = await certificateClient.GetCertificateOperationAsync(pendingCertificateName);
             
-            var certBundle = await certificateClient.GetCertificateAsync(issuerCertificateName).ConfigureAwait(false);
+            var certBundle = await certificateClient.GetCertificateAsync(issuerCertificateName);
             var signingCert = new X509Certificate2(certBundle.Value.Cer);
 
             var signatureGenerator = new KeyVaultSignatureGenerator(uri => new CryptographyClient(uri, credential), certBundle.Value.KeyId,  signingCert.SignatureAlgorithm);
 
-            var cert = await CertificateFactory.SignRequest(operation.Properties.Csr, signingCert, signatureGenerator, 30, HashAlgorithmName.SHA256 );
+            var cert = await CertificateFactory.SignRequest(operation.Properties.Csr, signingCert, signatureGenerator, DateTime.UtcNow.Date, DateTime.UtcNow.Date.AddDays(30), HashAlgorithmName.SHA256 );
 
             // TODO : build chain
 
@@ -116,14 +117,14 @@ namespace KeyVaultCA.Tests
 
             cert.NotAfter.Should().BeBefore(DateTime.Now.AddDays(30));
             var basicConstraints = cert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
-            basicConstraints.CertificateAuthority.Should().BeFalse();
+            basicConstraints!.CertificateAuthority.Should().BeFalse();
             basicConstraints.HasPathLengthConstraint.Should().BeFalse();
 
-            var alternativeDNSNames = cert.Extensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(x => x.EnumerateDnsNames()).ToArray();
-            alternativeDNSNames.Should().Contain("test.alanta.local");
+            var alternativeDnsNames = cert.Extensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(x => x.EnumerateDnsNames()).ToArray();
+            alternativeDnsNames.Should().Contain("test.alanta.local");
 
             var keyUsage = cert.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
-            keyUsage.KeyUsages.Should().Be(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment);
+            keyUsage!.KeyUsages.Should().Be(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment);
         }
 
         [Fact]
@@ -133,8 +134,8 @@ namespace KeyVaultCA.Tests
             req.CertificateExtensions.Should().NotBeEmpty();
 
             req.CertificateExtensions.OfType<X509SubjectAlternativeNameExtension>().Should().NotBeEmpty();
-            var alternativeDNSNames = req.CertificateExtensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(x => x.EnumerateDnsNames()).ToArray();
-            alternativeDNSNames.Should().Contain("test.alanta.local");
+            var alternativeDnsNames = req.CertificateExtensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(x => x.EnumerateDnsNames()).ToArray();
+            alternativeDnsNames.Should().Contain("test.alanta.local");
 
 
             //var request = new Pkcs10CertificationRequestDelaySigned(Convert.FromBase64String(csr)); 

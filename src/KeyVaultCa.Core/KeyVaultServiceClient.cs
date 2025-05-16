@@ -13,9 +13,9 @@ using Azure.Security.KeyVault.Keys.Cryptography;
 namespace KeyVaultCa.Core
 {
     /// <summary>
-    /// The KeyVault service client.
+    /// Implements multistep certificate operations to provide X509 certificate issuing using certificates stored in Azure Key Vault.
     /// </summary>
-    public class KeyVaultServiceClient
+    public class KeyVaultServiceOrchestrator
     {
         private readonly CertificateClient _certificateClient;
         private readonly Func<Uri, CryptographyClient> _cryptoClientFactory;
@@ -24,20 +24,21 @@ namespace KeyVaultCa.Core
         /// <summary>
         /// Create the certificate client for managing certificates in Key Vault, using developer authentication locally or managed identity in the cloud.
         /// </summary>
-        public KeyVaultServiceClient(
+        public KeyVaultServiceOrchestrator(
             CertificateClient certificateClient,
-            Func<Uri, CryptographyClient> cryptoClientFactory, ILogger<KeyVaultServiceClient> logger)
+            Func<Uri, CryptographyClient> cryptoClientFactory, 
+            ILogger<KeyVaultServiceOrchestrator> logger)
         {
             _certificateClient = certificateClient;
             _cryptoClientFactory = cryptoClientFactory;
             _logger = logger;
         }
 
-        internal async Task<X509Certificate2> CreateCACertificateAsync(
+        public async Task<X509Certificate2> CreateRootCertificateAsync(
             string id,
             string subject,
-            DateTime notBefore,
-            DateTime notAfter,
+            DateTimeOffset notBefore,
+            DateTimeOffset notAfter,
             int keySize,
             HashAlgorithmName hashAlgorithm,
             int? certPathLength,
@@ -175,7 +176,7 @@ namespace KeyVaultCa.Core
         /// </summary>
         /// <param name="certName">The name of the certificate.</param>
         /// <param name="ct">A cancellation token.</param>
-        /// <returns>A certificate opertion.</returns>
+        /// <returns>A certificate operation.</returns>
         public async Task<CertificateOperation> GetCertificateSigningRequestAsync(string certName,
             CancellationToken ct = default)
         {
@@ -235,12 +236,13 @@ namespace KeyVaultCa.Core
         }
 
         /// <summary>
-        /// Sings a KeyVault Certificate Request with a CA certificate, also in KeyVault.
+        /// Signs a KeyVault Certificate Request with a CA certificate, also in KeyVault.
         /// </summary>
         public async Task<X509Certificate2> SignRequestAsync(
             Uri certificateUri,
             Uri issuerCertificateUri,
-            int validityInDays,
+            DateTimeOffset notBefore,
+            DateTimeOffset notAfter,
             Func<Uri, CertificateClient> keyVaultClientFactory,
             Func<Uri, CryptographyClient> cryptoClientFactory,
             IReadOnlyList<X509Extension>? extensions = null,
@@ -262,10 +264,10 @@ namespace KeyVaultCa.Core
 
             var issuerKeyVault = keyVaultClientFactory(issuerCertificateIdentifier.VaultUri);
 
-            var csrOperation = await csrKeyVault.GetCertificateOperationAsync(csrCertificateIdentifier.Name)
+            var csrOperation = await csrKeyVault.GetCertificateOperationAsync(csrCertificateIdentifier.Name, ct)
                 .ConfigureAwait(false);
 
-            _logger.LogInformation("CSR: {csr}", Convert.ToBase64String(csrOperation.Properties.Csr));
+            _logger.LogDebug("CSR: {csr}", Convert.ToBase64String(csrOperation.Properties.Csr));
 
             if (csrOperation?.Properties?.Csr == null)
             {
@@ -292,7 +294,7 @@ namespace KeyVaultCa.Core
             }*/
 
 
-            var certBundle = await issuerKeyVault.GetCertificateAsync(issuerCertificateIdentifier.Name)
+            var certBundle = await issuerKeyVault.GetCertificateAsync(issuerCertificateIdentifier.Name, ct)
                 .ConfigureAwait(false);
             if (certBundle.Value == null)
             {
@@ -306,23 +308,32 @@ namespace KeyVaultCa.Core
                 signingCert,
                 new KeyVaultSignatureGenerator(cryptoClientFactory, certBundle.Value.KeyId,
                     signingCert.SignatureAlgorithm),
-                validityInDays,
+                notBefore,
+                notAfter,
                 HashAlgorithmName.SHA256,
-                extensions);
+                extensions, 
+                ct);
         }
 
         public async Task IssueCertificateAsync(
             string issuerCertificateName, 
             string certificateName, 
-            string subject, int validityInDays, SubjectAlternativeNames sans, CancellationToken ct)
+            string subject, 
+            DateTimeOffset notBefore,
+            DateTimeOffset notAfter,
+            SubjectAlternativeNames sans,
+            CancellationToken ct)
         {
             await _certificateClient.StartCreateCertificateAsync(certificateName, new CertificatePolicy("Unknown", subject, sans ), cancellationToken: ct);
             var signedCert2 = await SignRequestAsync(
                 new Uri($"{_certificateClient.VaultUri}certificates/{certificateName}"),
                 new Uri($"{_certificateClient.VaultUri}certificates/{issuerCertificateName}"),
-                validityInDays,
+                notBefore,
+                notAfter,
                 uri => _certificateClient, // WARNING : Assuming the same keyvault for now
-                _cryptoClientFactory);
+                _cryptoClientFactory,
+                extensions: null,
+                ct);
             await _certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificateName, new []{signedCert2.RawData}), default);
         }
     }

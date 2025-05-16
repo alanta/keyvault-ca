@@ -24,7 +24,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         
         
         var cryptographyClient = A.Fake<CryptographyClient>();
-        var kvServiceClient = new KeyVaultServiceClient(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceClient>(output));
+        var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
         // Act
@@ -32,7 +32,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
 
         // Assert
         var certificate = store.GetCertificateByName("UnitTestCA");
-        var certBytes = certificate.Cer;
+        var certBytes = certificate!.Cer;
         certBytes.Should().NotBeNull();
         var cert = new X509Certificate2(certBytes);
         cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.Should().BeTrue();
@@ -53,7 +53,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
             .WithGetCertificateVersionBehavior(certificateOperations);
         
         var cryptographyClient = A.Fake<CryptographyClient>();
-        var kvServiceClient = new KeyVaultServiceClient(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceClient>(output));
+        var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
         await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow.AddDays(-1),  DateTime.UtcNow.AddDays(30), 1, default);
@@ -67,20 +67,18 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var signedCert = await kvServiceClient.SignRequestAsync(
             new Uri("https://localhost/certificate/UnitTestIntermediate"), 
             new Uri("http://localhost/certificates/UnitTestCA"), 
-            30,
+            DateTime.UtcNow.Date,
+            DateTime.UtcNow.Date.AddDays(30),
             uri => certificateClient,
             uri => cryptographyClient,
             extensions,
             default) ;
-        
-        // TODO : Pass in extensions to override the default ones
-        
 
         await certificateClient.MergeCertificateAsync(new MergeCertificateOptions("UnitTestIntermediate", [signedCert.RawData]), default);
 
         // Assert
         var certificate = certificateOperations.GetCertificateByName("UnitTestIntermediate");
-        var certBytes = certificate.Cer;
+        var certBytes = certificate!.Cer;
         certBytes.Should().NotBeNull();
         var cert = new X509Certificate2(certBytes);
         cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.Should().BeTrue("Intermediate certificate should be a CA certificate");
@@ -102,23 +100,23 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
             .WithGetCertificateVersionBehavior(certificateOperations);
 
         var cryptographyClient = A.Fake<CryptographyClient>();
-        var kvServiceClient = new KeyVaultServiceClient(certificateClient, uri => cryptographyClient, new XUnitLogger<KeyVaultServiceClient>(output));
+        var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient, uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
         // Setup CA cert
-        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow.AddDays(-1),  DateTime.UtcNow.AddDays(30), 1, default);
+        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTimeOffset.UtcNow.AddDays(-1),  DateTimeOffset.UtcNow.AddDays(30), 1, default);
         // setup intermediate cert
         await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", new CertificatePolicy("Unknown", "CN=intermediate.local"));
         var signedCert = await kvServiceClient.SignRequestAsync(
             new Uri("https://localhost/certificate/UnitTestIntermediate"), 
             new Uri("http://localhost/certificates/UnitTestCA"), 
-            30,
+            DateTimeOffset.UtcNow.Date,
+            DateTimeOffset.UtcNow.Date.AddDays(30),
             uri => certificateClient,
-            uri => cryptographyClient);
+            uri => cryptographyClient,
+            extensions:[new X509BasicConstraintsExtension(true, true, 0, true)]);
 
         var result = await certificateClient.MergeCertificateAsync(new MergeCertificateOptions("UnitTestIntermediate", [signedCert.RawData]), default);
-        
-        
 
         // Act
         var sans = new SubjectAlternativeNames();
@@ -133,25 +131,26 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var signedCert2 = await kvServiceClient.SignRequestAsync(
             new Uri("https://localhost/certificate/LeafWithSAN"),
             new Uri("http://localhost/certificates/UnitTestIntermediate"),
-            30,
+            DateTimeOffset.UtcNow.Date,
+            DateTimeOffset.UtcNow.Date.AddDays(30),
             uri => certificateClient,
             uri => cryptographyClient);
         await certificateClient.MergeCertificateAsync(new MergeCertificateOptions("LeafWithSAN", [signedCert2.RawData]), default);
 
         // Assert
         var certificate = certificateOperations.GetCertificateByName("LeafWithSAN");
-        var certBytes = certificate.Cer;
+        var certBytes = certificate!.Cer;
         certBytes.Should().NotBeNull();
         var cert = new X509Certificate2(certBytes);
         cert.NotAfter.Should().BeBefore(DateTime.Now.AddDays(30));
         var basicConstraints = cert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
-        basicConstraints.CertificateAuthority.Should().BeFalse();
+        basicConstraints!.CertificateAuthority.Should().BeFalse();
         basicConstraints.HasPathLengthConstraint.Should().BeFalse();
 
-        var alternativeDNSNames = cert.Extensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(x => x.EnumerateDnsNames()).ToArray();
-        alternativeDNSNames.Should().Contain("test.alanta.local");
+        var alternativeDnsNames = cert.Extensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(x => x.EnumerateDnsNames()).ToArray();
+        alternativeDnsNames.Should().Contain("test.alanta.local");
 
         var keyUsage = cert.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
-        keyUsage.KeyUsages.Should().Be(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment);
+        keyUsage!.KeyUsages.Should().Be(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment);
     }
 }

@@ -1,4 +1,3 @@
-using System.Security.Cryptography.X509Certificates;
 using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Keys.Cryptography;
@@ -11,7 +10,7 @@ namespace KeyVaultCa.Cli.Handlers;
 
 public class IssueCert(ILoggerFactory loggerFactory)
 {
-    public async Task Execute(string keyVault, string issuer, string name, CancellationToken cancellationToken)
+    public async Task Execute(string keyVault, string issuer, string name, DateTimeOffset notBefore, DateTimeOffset notAfter, CancellationToken cancellationToken)
     {
         var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
         {
@@ -24,10 +23,11 @@ public class IssueCert(ILoggerFactory loggerFactory)
             ExcludeInteractiveBrowserCredential = true
         });
         var certificateClient = new CertificateClient(GetKeyVaultUri(keyVault), credential);
-        var kvServiceClient = new KeyVaultServiceClient(certificateClient, uri => new CryptographyClient(uri, credential), loggerFactory.CreateLogger<KeyVaultServiceClient>());
+        var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient, uri => new CryptographyClient(uri, credential), loggerFactory.CreateLogger<KeyVaultServiceOrchestrator>());
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
+        
 
-        await kvCertProvider.IssueCertificate(issuer, name, $"CN={name}", 90, cancellationToken);
+        await kvCertProvider.IssueCertificate(issuer, name, $"CN={name}", notBefore, notAfter, cancellationToken);
     }
     
     private static Uri GetKeyVaultUri(string keyVault)
@@ -45,10 +45,20 @@ public class IssueCert(ILoggerFactory loggerFactory)
         var issuerArgument = cmd.Argument<string>("issuer", "The name of the issuer certificate").IsRequired();
         var nameArgument = cmd.Argument<string>("name", "The name of the certificate").IsRequired();
         
+        var notBeforeOption = cmd.AddNotBeforeOption();
+        var notAfterOption = cmd.AddNotAfterOption();
+        var durationOption = cmd.AddDurationOption();
+        
         cmd.OnExecuteAsync(async cancellationToken =>
         {
+            var (notBefore, notAfter) = CommonOptions.DetermineValidityPeriod(
+                notBeforeOption,
+                notAfterOption,
+                durationOption,
+                TimeSpan.FromDays(365));
+            
             var handler = new IssueCert(CliApp.ServiceProvider.GetRequiredService<ILoggerFactory>());
-            await handler.Execute(kvOption.Value(), issuerArgument.Value, nameArgument.Value, cancellationToken);
+            await handler.Execute(kvOption.Value()!, issuerArgument.Value!, nameArgument.Value!, notBefore, notAfter, cancellationToken);
         });
     }
 }

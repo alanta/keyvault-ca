@@ -183,7 +183,7 @@ public class CertificateStore
     private static CertificateProperties ToCertPropsModel(CertificateVersion cert)
     {
         var props = CertificateModelFactory.CertificateProperties(
-            id: cert.Properties.Id, name: cert.Name, version: cert.Version );
+            id: cert.Properties!.Id, name: cert.Name, version: cert.Version );
         return props;
     }
 
@@ -232,7 +232,7 @@ public class CertificateStore
         A.CallTo(() => certOperation.Id).Returns(cert.Version);
         A.CallTo(() => certOperation.HasCompleted).Returns(cert.HasCompleted);
         A.CallTo(() => certOperation.Value).Returns(ToCertWithPolicyModel(cert.Name, cert.Version, cert.Policy, cert.Certificate));
-        A.CallTo(() => certOperation.Properties).Returns(cert.Properties);
+        A.CallTo(() => certOperation.Properties).Returns(cert.Properties!);
         return certOperation;
     }
 }

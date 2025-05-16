@@ -21,7 +21,8 @@ namespace KeyVaultCa.Core
         /// <param name="csr">The certificate signing request.</param>
         /// <param name="issuerCert">The issuer certificate.</param>
         /// <param name="generator">The signature generator.</param>
-        /// <param name="validityInDays">The number of days the certificate should be valid.</param>
+        /// <param name="notAfter">The date and time in UTC until which the certificate must be valid.</param>
+        /// <param name="notBefore">The date and time in UTC before which after which the certificate becomes valid.</param>
         /// <param name="hashAlgorithm">Optional. The hashing algorithm. Defaults tp SHA256</param>
         /// <param name="extensions">Optional. Aditional extension for the certificate. These extensions will replace
         /// extensions with the same OID in the CSR.</param>
@@ -30,18 +31,30 @@ namespace KeyVaultCa.Core
         /// <exception cref="ArgumentException"></exception>
         /// <exception cref="NotSupportedException"></exception>
         public static Task<X509Certificate2> SignRequest(byte[] csr, X509Certificate2 issuerCert,
-            X509SignatureGenerator generator, int validityInDays, HashAlgorithmName? hashAlgorithm = null,
+            X509SignatureGenerator generator, 
+            DateTimeOffset notBefore,
+            DateTimeOffset notAfter,
+            HashAlgorithmName? hashAlgorithm = null,
             IReadOnlyList<X509Extension>? extensions = null,
             CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(csr);
             ArgumentNullException.ThrowIfNull(issuerCert);
-
-            if (validityInDays <= 0)
+            
+            if (notBefore >= notAfter)
             {
-                throw new ArgumentException("validityInDays must be greater than 0", nameof(validityInDays));
+                throw new ArgumentException("Invalid validity period. notBefore must be before notAfter");
             }
-
+            
+            if (notAfter > issuerCert.NotAfter)
+            {   
+                throw new ArgumentException("Invalid validity period. Requested validity period is longer than the issuer certificate.");
+            }
+            if (notBefore < issuerCert.NotBefore)
+            {
+                throw new ArgumentException("Invalid validity period. Requested validity period starts before the issuer certificate is valid.");
+            }
+            
             var request = CertificateRequest.LoadSigningRequest(csr, hashAlgorithm ?? HashAlgorithmName.SHA256,
                 CertificateRequestLoadOptions.UnsafeLoadCertificateExtensions, RSASignaturePadding.Pkcs1);
             
@@ -95,17 +108,6 @@ namespace KeyVaultCa.Core
             }
 
             var serialNumber = GenerateSerialNumber();
-            var notBefore = DateTime.UtcNow.AddDays(-1);
-            var notAfter = notBefore.AddDays(validityInDays);
-
-            if (notAfter > issuerCert.NotAfter)
-            {
-                notAfter = issuerCert.NotAfter;
-            }
-            if (notBefore < issuerCert.NotBefore)
-            {
-                notBefore = issuerCert.NotBefore;
-            }
 
             X509Certificate2 signedCert = request.Create(
                 issuerCert.SubjectName,
@@ -120,7 +122,7 @@ namespace KeyVaultCa.Core
 
         /// <summary>
         /// Merge extensions by replacing any extension in the request of the same OID with the new extensions.
-        /// If no exisitng extension is found, the new extension is added to the request.
+        /// If no existing extension is found, the new extension is added to the request.
         /// </summary>
         /// <param name="request">The collection to update.</param>
         /// <param name="extensions">The extensions to merge in.</param>
@@ -175,8 +177,8 @@ namespace KeyVaultCa.Core
         /// <returns>The signed certificate</returns>
         public static Task<X509Certificate2> CreateSignedCACertificate(
             string subjectName,
-            DateTime notBefore,
-            DateTime notAfter,
+            DateTimeOffset notBefore,
+            DateTimeOffset notAfter,
             HashAlgorithmName hashAlgorithm,
             RSA publicKey,
             X509SignatureGenerator generator,
