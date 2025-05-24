@@ -8,6 +8,7 @@ namespace KeyVaultCA.Tests.KeyVault;
 public class CertificateStore
 {
     private readonly List<CertificateVersion> _certificates = new();
+    public string VaultUri { get; } = $"https://keyvault.{Guid.NewGuid()}.localhost/";
 
     public IReadOnlyList<CertificateVersion> CertificateVersions => _certificates;
 
@@ -35,12 +36,12 @@ public class CertificateStore
         if (policy.KeyType == CertificateKeyType.Ec)
         {
             var key = ECDsa.Create();
-            csr = new CertificateRequest(new X500DistinguishedName(policy.Subject ?? "CN=Test"), key, HashAlgorithmName.SHA256);
+            csr = new CertificateRequest(new X500DistinguishedName(policy.Subject), key, HashAlgorithmName.SHA256);
         }
         else
         {
             var key = RSA.Create(policy.KeySize ?? 4096);
-            csr = new CertificateRequest(new X500DistinguishedName(policy.Subject ?? "CN=Test"), key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            csr = new CertificateRequest(new X500DistinguishedName(policy.Subject), key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         }
 
         if (policy.SubjectAlternativeNames != null)
@@ -166,10 +167,12 @@ public class CertificateStore
     {
         if (string.IsNullOrWhiteSpace(certName))
             throw new ArgumentException("Value cannot be null or whitespace.", nameof(certName));
+        if (string.IsNullOrWhiteSpace(version))
+            throw new ArgumentException("Value cannot be null or whitespace.", nameof(version));
 
         var cert = _certificates.LastOrDefault(c => c.Name == certName && c.Version == version);
 
-        return cert != null ? ToCertModel(cert.Name, cert.Version, cert.Certificate) : null;
+        return cert != null ? ToCertModel(cert) : null;
     }
 
     public IReadOnlyList<CertificateProperties> GetPropertiesOfCertificateVersionsByName(string certName)
@@ -184,24 +187,27 @@ public class CertificateStore
     {
         var props = CertificateModelFactory.CertificateProperties(
             id: cert.Properties!.Id, name: cert.Name, version: cert.Version );
+        props.Enabled = cert.Enabled;
         return props;
     }
 
-    private static KeyVaultCertificate ToCertModel(string certName, string version, byte[]? rawBytes = null)
+    private static KeyVaultCertificate ToCertModel(CertificateVersion cert, byte[]? rawBytes = null)
     {
-        var props = CertificateModelFactory.CertificateProperties(id: new Uri($"https://localhost/certificates/{certName}/{version}"));
-        var cert = CertificateModelFactory.KeyVaultCertificate(
+        var props = CertificateModelFactory.CertificateProperties(id: new Uri($"https://localhost/certificates/{cert.Name}/{cert.Version}"), name: cert.Name, version: cert.Version);
+        props.Enabled = cert.Enabled;
+        
+        var result = CertificateModelFactory.KeyVaultCertificate(
             props,
-            keyId: new Uri($"https://localhost/keys/{certName}/{version}"),
-            secretId: new Uri($"https://localhost/secrets/{certName}/{version}"),
+            keyId: new Uri($"https://localhost/keys/{cert.Name}/{cert.Version}"),
+            secretId: new Uri($"https://localhost/secrets/{cert.Name}/{cert.Version}"),
             cer: rawBytes);
 
-        return cert;
+        return result;
     }
 
     private static KeyVaultCertificateWithPolicy ToCertWithPolicyModel(string certName, string version, CertificatePolicy? policy = null, byte[]? rawBytes = null)
     {
-        var props = CertificateModelFactory.CertificateProperties(id: new Uri($"https://localhost/certificates/{certName}/{version}"));
+        var props = CertificateModelFactory.CertificateProperties(id: new Uri($"https://localhost/certificates/{certName}/{version}"), name: certName, version: version);
         var cert = CertificateModelFactory.KeyVaultCertificateWithPolicy(
             props,
             keyId: new Uri($"https://localhost/keys/{certName}/{version}"),
@@ -233,6 +239,8 @@ public class CertificateStore
         A.CallTo(() => certOperation.HasCompleted).Returns(cert.HasCompleted);
         A.CallTo(() => certOperation.Value).Returns(ToCertWithPolicyModel(cert.Name, cert.Version, cert.Policy, cert.Certificate));
         A.CallTo(() => certOperation.Properties).Returns(cert.Properties!);
+        A.CallTo(() => certOperation.WaitForCompletionAsync(A<CancellationToken>._))
+            .Returns(MockResponse<KeyVaultCertificateWithPolicy>.Ok(ToCertWithPolicyModel(cert.Name, cert.Version, cert.Policy, cert.Certificate)));
         return certOperation;
     }
 }

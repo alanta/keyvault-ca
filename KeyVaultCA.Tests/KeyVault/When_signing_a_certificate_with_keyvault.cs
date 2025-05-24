@@ -15,7 +15,6 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
     public async Task Should_create_a_CA_certificate()
     {
         // Arrange
-        var certName = Guid.NewGuid().ToString();
         var store = new CertificateStore();
         var certificateClient = A.Fake<CertificateClient>() // x => x.Strict()
             .WithCreateCertificateBehavior(store)
@@ -45,36 +44,33 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
     {
         // Arrange
         var certificateOperations = new CertificateStore();
-        var certificateClient = A.Fake<CertificateClient>(x => x.Strict())
-            .WithCreateCertificateBehavior(certificateOperations)
-            .WithMergeCertificateBehavior(certificateOperations)
-            .WithGetCertificateBehavior(certificateOperations)
-            .WithGetCertificateOperationBehavior(certificateOperations)
-            .WithGetCertificateVersionBehavior(certificateOperations);
+        var certificateClient = certificateOperations.GetFakeCertificateClient();
         
         var cryptographyClient = A.Fake<CryptographyClient>();
         var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
         await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow.AddDays(-1),  DateTime.UtcNow.AddDays(30), 1, default);
-        
 
         // Act
-        var policy = new CertificatePolicy("Unknown", "CN=test.local");
-        await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", policy);
-        // Override basic constraints to produce an intermediate certificate
-        List<X509Extension> extensions = [new X509BasicConstraintsExtension(true, true, 0, true)];
-        var signedCert = await kvServiceClient.SignRequestAsync(
-            new Uri("https://localhost/certificate/UnitTestIntermediate"), 
-            new Uri("http://localhost/certificates/UnitTestCA"), 
-            DateTime.UtcNow.Date,
+        output.WriteLine("------ ACT -------");
+        
+        //var policy = new CertificatePolicy("Unknown", "CN=intermediate.local");
+        //await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", policy);
+        
+        await kvCertProvider.IssueIntermediateCertificateAsync(
+            "UnitTestCA", 
+            "UnitTestIntermediate",
+            "CN=intermediate.local", 
+            DateTime.UtcNow.Date, 
             DateTime.UtcNow.Date.AddDays(30),
-            uri => certificateClient,
-            uri => cryptographyClient,
-            extensions,
-            default) ;
-
-        await certificateClient.MergeCertificateAsync(new MergeCertificateOptions("UnitTestIntermediate", [signedCert.RawData]), default);
+            new SubjectAlternativeNames()
+            {
+                DnsNames = { "intermediate.local" }
+            }, 
+            0, 
+            default);
+        ;
 
         // Assert
         var certificate = certificateOperations.GetCertificateByName("UnitTestIntermediate");
@@ -92,12 +88,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
     {
         // Arrange
         var certificateOperations = new CertificateStore();
-        var certificateClient = A.Fake<CertificateClient>(x => x.Strict())
-            .WithCreateCertificateBehavior(certificateOperations)
-            .WithMergeCertificateBehavior(certificateOperations)
-            .WithGetCertificateBehavior(certificateOperations)
-            .WithGetCertificateOperationBehavior(certificateOperations)
-            .WithGetCertificateVersionBehavior(certificateOperations);
+        var certificateClient = certificateOperations.GetFakeCertificateClient();
 
         var cryptographyClient = A.Fake<CryptographyClient>();
         var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient, uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
@@ -153,4 +144,9 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var keyUsage = cert.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
         keyUsage!.KeyUsages.Should().Be(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment);
     }
+}
+
+public static class KeyVaultMockExtensions
+{
+    
 }

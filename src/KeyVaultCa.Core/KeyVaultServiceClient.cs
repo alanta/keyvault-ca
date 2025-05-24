@@ -146,9 +146,9 @@ namespace KeyVaultCa.Core
                         // disable the temp cert for self signing operation
                         _logger.LogDebug("Disable the temporary certificate for self signing operation.");
 
-                        Response<KeyVaultCertificateWithPolicy> certificateResponse =
-                            await _certificateClient.GetCertificateAsync(caTempCertIdentifier, ct);
-                        KeyVaultCertificateWithPolicy certificate = certificateResponse.Value;
+                        Response<KeyVaultCertificate> certificateResponse =
+                            await _certificateClient.GetCertificateVersionAsync(id, caTempCertIdentifier, ct);
+                        KeyVaultCertificate certificate = certificateResponse.Value;
                         CertificateProperties certificateProperties = certificate.Properties;
                         certificateProperties.Enabled = false;
                         await _certificateClient.UpdateCertificatePropertiesAsync(certificateProperties, ct);
@@ -312,15 +312,6 @@ namespace KeyVaultCa.Core
                 HashAlgorithmName.SHA256,
                 extensions, 
                 ct);
-        }
-
-        public static class WellKnownOids
-        {
-            public static class ExtendedKeyUsages
-            {
-                public const string ServerAuth = "1.3.6.1.5.5.7.3.1";
-                public const string ClientAuth = "1.3.6.1.5.5.7.3.2";
-            }
         }
 
         public async Task IssueIntermediateCertificateAsync(

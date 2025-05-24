@@ -11,6 +11,29 @@ namespace KeyVaultCA.Tests.KeyVault;
 /// </summary>
 public static class MockKeyVault
 {
+    public static CertificateClient GetFakeCertificateClient(this CertificateStore certificateOperations)
+    {
+        var certificateClient = A.Fake<CertificateClient>(x => x.Strict())
+            .WithVaultUri(certificateOperations.VaultUri)
+            .WithCreateCertificateBehavior(certificateOperations)
+            .WithMergeCertificateBehavior(certificateOperations)
+            .WithGetCertificateBehavior(certificateOperations)
+            .WithGetCertificateOperationBehavior(certificateOperations)
+            .WithGetCertificateVersionBehavior(certificateOperations)
+            .WithUpdateCertificatePropertiesBehavior(certificateOperations);
+
+        return certificateClient;
+    }
+    
+    public static CertificateClient WithVaultUri(this CertificateClient certificateClient, string vaultUri)
+    {
+        // Set the vault URI
+        A.CallTo(() => certificateClient.VaultUri)
+            .Returns(new Uri(vaultUri));
+
+        return certificateClient;
+    }
+    
     public static CertificateClient WithMergeCertificateBehavior(this CertificateClient certificateClient, CertificateStore certificates)
     {
         // Merge a certificate
@@ -55,7 +78,7 @@ public static class MockKeyVault
 
         return certificateClient;
     }
-
+    
     public static CertificateClient WithGetCertificateVersionBehavior(this CertificateClient certificateClient, CertificateStore certificates)
     {
         A.CallTo(() => certificateClient.GetCertificateVersionAsync(A<string>._, A<string>._, A<CancellationToken>._))
@@ -99,6 +122,45 @@ public static class MockKeyVault
 
         return certificateClient;
     }
+
+    public static CertificateClient WithUpdateCertificatePropertiesBehavior(this CertificateClient certificateClient,
+        CertificateStore certificates)
+    {
+        A.CallTo(() => certificateClient.UpdateCertificatePropertiesAsync(A<CertificateProperties>._, A<CancellationToken>._))
+            .ReturnsLazily( (CertificateProperties properties, CancellationToken ct) =>
+            {
+                var cert = certificates.GetCertificateByNameAndVersion(properties.Name, properties.Version);
+                if (cert == null)
+                    throw new RequestFailedException(404, "Not Found");
+
+                // Update supported properties
+                cert.Properties.Enabled = properties.Enabled;
+
+                return Response.FromValue(cert, MockResponse.Ok());
+            });
+        
+        return certificateClient;
+    }
+}
+
+public sealed class MockResponse<T> : Response<T>
+{
+    public static MockResponse<T> Ok(T value) => new (MockResponse.Ok(), value);
+    
+    private readonly Response _rawResponse;
+    
+    private MockResponse( MockResponse response, T value)
+    {
+        _rawResponse = response;
+        Value = value;
+    }
+
+    public override Response GetRawResponse()
+    {
+        return _rawResponse;
+    }
+
+    public override T Value { get; }
 }
 
 
@@ -107,7 +169,7 @@ public sealed class MockResponse : Response
     public static MockResponse NotFound() => new (404, "Not Found");
     public static MockResponse Ok() => new (200, "OK");
 
-    private MockResponse( int status, string reasonPhrase)
+    internal MockResponse( int status, string reasonPhrase)
     {
         Status = status;
         ReasonPhrase = reasonPhrase;

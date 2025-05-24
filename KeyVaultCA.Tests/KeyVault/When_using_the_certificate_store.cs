@@ -17,9 +17,10 @@ public class When_using_the_certificate_store
         // Arrange
         var certStore = new CertificateStore();
         var name = Guid.NewGuid().ToString();
+        var policy = new CertificatePolicy("Unknown", "CN=test");
 
         // Act
-        var operation = certStore.StartOperation(name, A.Fake<CertificatePolicy>());
+        var operation = certStore.StartOperation(name, policy);
 
         // Assert
         var operation2 = certStore.GetCertificateOperationById(operation.Id);
@@ -35,8 +36,9 @@ public class When_using_the_certificate_store
         var name = Guid.NewGuid().ToString();
         var csr = new CertificateRequest(new X500DistinguishedName("CN=test"), ECDsa.Create(), HashAlgorithmName.SHA256);
         var cert = csr.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(1));
+        var policy = new CertificatePolicy("Unknown", "CN=test");
 
-        var operation = certStore.StartOperation(name, A.Fake<CertificatePolicy>());
+        var operation = certStore.StartOperation(name, policy);
 
         // Act
         certStore.Merge(name, cert.RawData);

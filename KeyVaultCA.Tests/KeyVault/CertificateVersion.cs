@@ -11,4 +11,6 @@ public class CertificateVersion
     public byte[]? Certificate { get; set; }
     public byte[]? CertSigningRequest { get; set; }
     public bool HasCompleted => Certificate != null;
+    
+    public bool Enabled { get; set; } = true;
 }

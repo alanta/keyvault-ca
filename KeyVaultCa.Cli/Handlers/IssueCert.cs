@@ -27,7 +27,7 @@ public class IssueCert(ILoggerFactory loggerFactory)
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
         
 
-        await kvCertProvider.IssueCertificate(issuer, name, $"CN={name}", notBefore, notAfter, cancellationToken);
+        await kvCertProvider.IssueCertificate(issuer, name, $"CN={name}", notBefore, notAfter, new SubjectAlternativeNames{ DnsNames = { name }}, cancellationToken);
     }
     
     private static Uri GetKeyVaultUri(string keyVault)

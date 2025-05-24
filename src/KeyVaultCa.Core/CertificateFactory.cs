@@ -88,8 +88,9 @@ namespace KeyVaultCa.Core
                     new X509EnhancedKeyUsageExtension(
                         new OidCollection
                         {
-                            new Oid("1.3.6.1.5.5.7.3.1"), // serverAuth
-                            new Oid("1.3.6.1.5.5.7.3.2") }, // clientAuth
+                            new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth),
+                            new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) 
+                        },
                         true));
             }
             
