@@ -6,7 +6,7 @@ using KeyVaultCa.Core;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using KeyVaultCa.Cli.Validatiors;
+using KeyVaultCa.Cli.Validators;
 
 namespace KeyVaultCa.Cli.Handlers;
 

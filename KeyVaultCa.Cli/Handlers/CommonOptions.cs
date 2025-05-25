@@ -1,5 +1,5 @@
 using System.Globalization;
-using KeyVaultCa.Cli.Validatiors;
+using KeyVaultCa.Cli.Validators;
 using McMaster.Extensions.CommandLineUtils;
 
 namespace KeyVaultCa.Cli.Handlers;
@@ -38,9 +38,7 @@ public static class CommonOptions
             : DateTime.UtcNow;
 
         var duration = durationOption.HasValue()
-            ? TimeSpan.TryParse(durationOption.Value()!, CultureInfo.InvariantCulture, out var parsed3)
-                ? parsed3
-                : defaultDuration
+            ? durationOption.ParsedValue
             : defaultDuration;
 
         var notAfter = notAfterOption.HasValue()

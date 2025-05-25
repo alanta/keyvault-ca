@@ -1,4 +1,5 @@
 using System.Reflection;
+using KeyVaultCa.Cli.Validators;
 using McMaster.Extensions.CommandLineUtils;
 
 namespace KeyVaultCa.Cli.Handlers;
@@ -11,6 +12,7 @@ public class CliApp
     {
         app.Name = "keyvaultca";
         app.Description = "A tool for managing a certificate authority in Azure Key Vault";
+        app.ValueParsers.AddOrReplace(new TimeSpanValueParser());
         app.HelpOption(inherited: true);
         app.Command("create-ca-cert", CreateCACert.Configure);
         app.Command("issue-intermediate-cert", IssueIntermediateCert.Configure);
