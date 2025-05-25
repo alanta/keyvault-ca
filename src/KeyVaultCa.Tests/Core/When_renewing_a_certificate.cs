@@ -78,4 +78,18 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
         x509Renewed.NotAfter.Should().Be(today.AddDays(60));
     }
 
+    public async Task It_should_cancel_pending_operation_for_other_issuer()
+    {
+        // TODO
+    }
+    
+    public async Task It_should_continue_pending_operation()
+    {
+        // TODO
+    }
+    
+    public async Task It_should_not_allow_overlapping_validity_periods()
+    {
+        // TODO
+    }
 }

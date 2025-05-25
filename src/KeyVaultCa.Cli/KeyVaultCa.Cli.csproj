@@ -20,7 +20,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\src\KeyVaultCa.Core\KeyVaultCa.Core.csproj" />
+      <ProjectReference Include="..\KeyVaultCa.Core\KeyVaultCa.Core.csproj" />
     </ItemGroup>
 
 </Project>

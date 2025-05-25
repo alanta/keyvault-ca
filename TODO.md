@@ -25,18 +25,19 @@ The core library has most of the required functionality:
 
 ## Work breakdown
 * Clear out unused code, restructure to make it more intuitive
+* Use different KeyVault for CA and leaf certs
 * Add CLI project
-  * Create CA cert
-  * Issue Intermediate cert
-  * Issue leaf cert
-  * Renew leaf cert
-  * Download cert (optionally with key, as that is needed for some scenarios)
-  * Revoke cert
-  * Specify key parameters (key size, key type)
-  * Specify cert parameters (subject, validity, SAN)
-  * Support PKCS12 format (.pfx)
-  * Support PKCS8 / PEM format (.pem, .crt and ,key)
-  * Support DER format (.der, .crt and .key)
+  * [x] Create CA cert
+  * [ ] Issue Intermediate cert
+  * [x] Issue leaf cert
+  * [x] Renew leaf cert
+  * [x] Download cert (optionally with key, as that is needed for some scenarios)
+  * [ ] Revoke cert
+  * [ ] Specify key parameters (key size, key type)
+  * [ ] Specify cert parameters (subject, validity, SAN)
+  * [ ] Support PKCS12 format (.pfx)
+  * [x] Support PKCS8 / PEM format (.pem, .crt and ,key)
+  * [ ] Support DER format (.der, .crt and .key)
 
 * Add auto-renewal worker for containerized deployment
 
@@ -45,8 +46,11 @@ The core library has most of the required functionality:
 
 ## Future work
 * Certificate revocation endpoint
-* Add auto-renewal worker for Azure Function deployment
-* 
+* Add auto-renewal worker
+  * Azure Function deployment
+  * Azure Container Apps Job deployment
+  * Generic container deployment
+
 # Research notes
 
 ## Refactor SignCSR to sign cert payloads in Azure KeyVault
