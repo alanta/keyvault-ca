@@ -196,21 +196,27 @@ public class CertificateStore
 
     private static KeyVaultCertificate ToCertModel(CertificateVersion cert, byte[]? rawBytes = null)
     {
-        var props = CertificateModelFactory.CertificateProperties(id: new Uri($"https://localhost/certificates/{cert.Name}/{cert.Version}"), name: cert.Name, version: cert.Version);
+        var props = CertificateModelFactory.CertificateProperties(
+            id: new Uri($"https://localhost/certificates/{cert.Name}/{cert.Version}"), 
+            name: cert.Name, 
+            version: cert.Version);
         props.Enabled = cert.Enabled;
         
         var result = CertificateModelFactory.KeyVaultCertificate(
             props,
             keyId: new Uri($"https://localhost/keys/{cert.Name}/{cert.Version}"),
             secretId: new Uri($"https://localhost/secrets/{cert.Name}/{cert.Version}"),
-            cer: rawBytes);
+            cer: rawBytes ?? cert.Certificate);
 
         return result;
     }
 
     private static KeyVaultCertificateWithPolicy ToCertWithPolicyModel(string certName, string version, CertificatePolicy? policy = null, byte[]? rawBytes = null)
     {
-        var props = CertificateModelFactory.CertificateProperties(id: new Uri($"https://localhost/certificates/{certName}/{version}"), name: certName, version: version);
+        var props = CertificateModelFactory.CertificateProperties(
+            id: new Uri($"https://localhost/certificates/{certName}/{version}"), 
+            name: certName, 
+            version: version);
         var cert = CertificateModelFactory.KeyVaultCertificateWithPolicy(
             props,
             keyId: new Uri($"https://localhost/keys/{certName}/{version}"),

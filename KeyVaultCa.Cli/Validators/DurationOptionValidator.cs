@@ -5,7 +5,7 @@ using McMaster.Extensions.CommandLineUtils.Validation;
 
 namespace KeyVaultCa.Cli.Validators;
 
-public class DateOptionValidator : IOptionValidator
+public class DurationOptionValidator : IOptionValidator
 {
     public ValidationResult GetValidationResult(CommandOption option, ValidationContext context)
     {
@@ -13,8 +13,26 @@ public class DateOptionValidator : IOptionValidator
         if (!option.HasValue()) return ValidationResult.Success!;
         
         var val = option.Value();
+        var valid = true;
 
-        if (string.IsNullOrWhiteSpace(val) || !DateTime.TryParse(val, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+        if (!string.IsNullOrWhiteSpace(val))
+        {
+            valid = TimeSpan.TryParse(val, CultureInfo.InvariantCulture, out _);
+            if (!valid)
+            {
+                try
+                {
+                    System.Xml.XmlConvert.ToTimeSpan(val);
+                    valid = true;
+                }
+                catch
+                {
+                    valid = false;
+                }
+            }
+        }
+        
+        if( !valid )
         {
             return new ValidationResult($"The value for option --{option.LongName} is not a valid UTC date time.");
         }
