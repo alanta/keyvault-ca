@@ -10,7 +10,7 @@ namespace KeyVaultCa.Cli.Handlers;
 
 public class IssueCert(ILoggerFactory loggerFactory)
 {
-    public async Task Execute(string keyVault, string issuer, string name, DateTimeOffset notBefore, DateTimeOffset notAfter, CancellationToken cancellationToken)
+    public async Task Execute(string keyVault, string issuer, string name, DateTimeOffset notBefore, DateTimeOffset notAfter, SubjectAlternativeNames san, CancellationToken cancellationToken)
     {
         var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
         {
@@ -25,9 +25,8 @@ public class IssueCert(ILoggerFactory loggerFactory)
         var certificateClient = new CertificateClient(GetKeyVaultUri(keyVault), credential);
         var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient, uri => new CryptographyClient(uri, credential), loggerFactory.CreateLogger<KeyVaultServiceOrchestrator>());
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
-        
 
-        await kvCertProvider.IssueCertificate(issuer, name, $"CN={name}", notBefore, notAfter, new SubjectAlternativeNames{ DnsNames = { name }}, cancellationToken);
+        await kvCertProvider.IssueCertificate(issuer, name, $"CN={name}", notBefore, notAfter, san, cancellationToken);
     }
     
     private static Uri GetKeyVaultUri(string keyVault)
@@ -48,9 +47,15 @@ public class IssueCert(ILoggerFactory loggerFactory)
         var notBeforeOption = cmd.AddNotBeforeOption();
         var notAfterOption = cmd.AddNotAfterOption();
         var durationOption = cmd.AddDurationOption();
+
+        var dnsOption = cmd.AddDnsOption();
+        var emailOption = cmd.AddEmailOption();
+        var upnOption = cmd.AddUpnOption();
         
         cmd.OnExecuteAsync(async cancellationToken =>
         {
+            var san = CommonOptions.ParseSubjectAlternativeNames(dnsOption, emailOption, upnOption);
+            
             var (notBefore, notAfter) = CommonOptions.DetermineValidityPeriod(
                 notBeforeOption,
                 notAfterOption,
@@ -58,7 +63,7 @@ public class IssueCert(ILoggerFactory loggerFactory)
                 TimeSpan.FromDays(365));
             
             var handler = new IssueCert(CliApp.ServiceProvider.GetRequiredService<ILoggerFactory>());
-            await handler.Execute(kvOption.Value()!, issuerArgument.Value!, nameArgument.Value!, notBefore, notAfter, cancellationToken);
+            await handler.Execute(kvOption.Value()!, issuerArgument.Value!, nameArgument.Value!, notBefore, notAfter, san, cancellationToken);
         });
     }
 }
