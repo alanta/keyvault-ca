@@ -1,16 +1,19 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using Azure;
-using Azure.Core;
+﻿using Azure;
 using Azure.Security.KeyVault.Certificates;
 using FakeItEasy;
 
 namespace KeyVaultCA.Tests.KeyVault;
 
 /// <summary>
-/// Helps setup the behavior of the KeyVault client to simulate the KeyVault service for testing.
+/// Helps set up the behavior of the KeyVault client to simulate the KeyVault service for testing.
 /// </summary>
 public static class MockKeyVault
 {
+    /// <summary>
+    /// Create a certificate client that simulates the KeyVault service using the provided <see cref="CertificateStore"/>.
+    /// </summary>
+    /// <param name="certificateOperations">The certificate store to use.</param>
+    /// <returns>The client</returns>
     public static CertificateClient GetFakeCertificateClient(this CertificateStore certificateOperations)
     {
         var certificateClient = A.Fake<CertificateClient>(x => x.Strict())
@@ -24,8 +27,8 @@ public static class MockKeyVault
 
         return certificateClient;
     }
-    
-    public static CertificateClient WithVaultUri(this CertificateClient certificateClient, string vaultUri)
+
+    private static CertificateClient WithVaultUri(this CertificateClient certificateClient, string vaultUri)
     {
         // Set the vault URI
         A.CallTo(() => certificateClient.VaultUri)
@@ -33,8 +36,8 @@ public static class MockKeyVault
 
         return certificateClient;
     }
-    
-    public static CertificateClient WithMergeCertificateBehavior(this CertificateClient certificateClient, CertificateStore certificates)
+
+    private static CertificateClient WithMergeCertificateBehavior(this CertificateClient certificateClient, CertificateStore certificates)
     {
         // Merge a certificate
         A.CallTo(() => certificateClient.MergeCertificateAsync(A<MergeCertificateOptions>._, A<CancellationToken>._))
@@ -48,7 +51,7 @@ public static class MockKeyVault
         return certificateClient;
     }
 
-    public static CertificateClient WithCreateCertificateBehavior(this CertificateClient certificateClient, CertificateStore certificates)
+    private static CertificateClient WithCreateCertificateBehavior(this CertificateClient certificateClient, CertificateStore certificates)
     {
         // Start a certificate creation operation. Returns a completed operation.
         A.CallTo(() => certificateClient.StartCreateCertificateAsync(A<string>._, A<CertificatePolicy>._,
@@ -62,7 +65,7 @@ public static class MockKeyVault
         return certificateClient;
     }
 
-    public static CertificateClient WithGetCertificateBehavior(this CertificateClient certificateClient, CertificateStore certificates)
+    private static CertificateClient WithGetCertificateBehavior(this CertificateClient certificateClient, CertificateStore certificates)
     {
         // Get a certificate
         A.CallTo(() => certificateClient.GetCertificateAsync(A<string>._, A<CancellationToken>._))
@@ -78,8 +81,8 @@ public static class MockKeyVault
 
         return certificateClient;
     }
-    
-    public static CertificateClient WithGetCertificateVersionBehavior(this CertificateClient certificateClient, CertificateStore certificates)
+
+    private static CertificateClient WithGetCertificateVersionBehavior(this CertificateClient certificateClient, CertificateStore certificates)
     {
         A.CallTo(() => certificateClient.GetCertificateVersionAsync(A<string>._, A<string>._, A<CancellationToken>._))
             .ReturnsLazily((string name, string version, CancellationToken ct) =>
@@ -97,7 +100,8 @@ public static class MockKeyVault
             {
                 var results = certificates.GetPropertiesOfCertificateVersionsByName(certName);
 
-                var pages = AsyncPageable<CertificateProperties>.FromPages(new[] { Page<CertificateProperties>.FromValues(results, "nope", MockResponse.Ok()) });
+                var pages = AsyncPageable<CertificateProperties>.FromPages([Page<CertificateProperties>.FromValues(results, "nope", MockResponse.Ok())
+                ]);
 
                 return Response.FromValue( pages, MockResponse.Ok());
             });
@@ -105,7 +109,7 @@ public static class MockKeyVault
         return certificateClient;
     }
 
-    public static CertificateClient WithGetCertificateOperationBehavior(this CertificateClient certificateClient,
+    private static CertificateClient WithGetCertificateOperationBehavior(this CertificateClient certificateClient,
         CertificateStore certificates)
     {
         // Get a certificate operation
@@ -123,7 +127,7 @@ public static class MockKeyVault
         return certificateClient;
     }
 
-    public static CertificateClient WithUpdateCertificatePropertiesBehavior(this CertificateClient certificateClient,
+    private static CertificateClient WithUpdateCertificatePropertiesBehavior(this CertificateClient certificateClient,
         CertificateStore certificates)
     {
         A.CallTo(() => certificateClient.UpdateCertificatePropertiesAsync(A<CertificateProperties>._, A<CancellationToken>._))
@@ -142,62 +146,3 @@ public static class MockKeyVault
         return certificateClient;
     }
 }
-
-public sealed class MockResponse<T> : Response<T>
-{
-    public static MockResponse<T> Ok(T value) => new (MockResponse.Ok(), value);
-    
-    private readonly Response _rawResponse;
-    
-    private MockResponse( MockResponse response, T value)
-    {
-        _rawResponse = response;
-        Value = value;
-    }
-
-    public override Response GetRawResponse()
-    {
-        return _rawResponse;
-    }
-
-    public override T Value { get; }
-}
-
-
-public sealed class MockResponse : Response
-{
-    public static MockResponse NotFound() => new (404, "Not Found");
-    public static MockResponse Ok() => new (200, "OK");
-
-    internal MockResponse( int status, string reasonPhrase)
-    {
-        Status = status;
-        ReasonPhrase = reasonPhrase;
-        ClientRequestId = Guid.NewGuid().ToString();
-    }
-
-    public override int Status { get; }
-
-    public override string ReasonPhrase { get; }
-
-    public override Stream? ContentStream
-    {
-        get => throw new NotImplementedException();
-        set => throw new NotImplementedException();
-    }
-    public override string ClientRequestId { get; set; }
-
-    public override void Dispose() {}
-    protected override bool ContainsHeader(string name) => false;
-    protected override IEnumerable<HttpHeader> EnumerateHeaders() => [];
-    protected override bool TryGetHeader(
-        string name,
-        [NotNullWhen(true)] out string? value) =>
-        throw new NotImplementedException();
-    protected override bool TryGetHeaderValues(
-        string name,
-        [NotNullWhen(true)] out IEnumerable<string>? values) =>
-        throw new NotImplementedException();
-}
-
-

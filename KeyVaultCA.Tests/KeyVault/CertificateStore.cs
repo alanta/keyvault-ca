@@ -5,6 +5,9 @@ using System.Security.Cryptography;
 
 namespace KeyVaultCA.Tests.KeyVault;
 
+/// <summary>
+/// In-memory store for certificate operations. Emulates a Key Vault certificate store for testing purposes.
+/// </summary>
 public class CertificateStore
 {
     private readonly List<CertificateVersion> _certificates = new();

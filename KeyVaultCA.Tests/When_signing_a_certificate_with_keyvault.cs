@@ -4,10 +4,11 @@ using Azure.Security.KeyVault.Keys.Cryptography;
 using FakeItEasy;
 using FluentAssertions;
 using KeyVaultCa.Core;
+using KeyVaultCA.Tests.KeyVault;
 using KeyVaultCA.Tests.Tools;
 using Xunit.Abstractions;
 
-namespace KeyVaultCA.Tests.KeyVault;
+namespace KeyVaultCA.Tests;
 
 public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
 {
@@ -16,11 +17,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
     {
         // Arrange
         var store = new CertificateStore();
-        var certificateClient = A.Fake<CertificateClient>() // x => x.Strict()
-            .WithCreateCertificateBehavior(store)
-            .WithMergeCertificateBehavior(store)
-            .WithGetCertificateBehavior(store);
-        
+        var certificateClient = store.GetFakeCertificateClient();
         
         var cryptographyClient = A.Fake<CryptographyClient>();
         var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
@@ -55,9 +52,6 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         // Act
         output.WriteLine("------ ACT -------");
         
-        //var policy = new CertificatePolicy("Unknown", "CN=intermediate.local");
-        //await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", policy);
-        
         await kvCertProvider.IssueIntermediateCertificateAsync(
             "UnitTestCA", 
             "UnitTestIntermediate",
@@ -70,7 +64,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
             }, 
             0, 
             default);
-        ;
+
 
         // Assert
         var certificate = certificateOperations.GetCertificateByName("UnitTestIntermediate");
@@ -144,9 +138,4 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var keyUsage = cert.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
         keyUsage!.KeyUsages.Should().Be(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment);
     }
-}
-
-public static class KeyVaultMockExtensions
-{
-    
 }

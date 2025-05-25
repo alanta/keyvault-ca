@@ -1,7 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Azure.Security.KeyVault.Certificates;
-using FakeItEasy;
 using FluentAssertions;
 
 namespace KeyVaultCA.Tests.KeyVault;

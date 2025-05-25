@@ -2,6 +2,9 @@ using Azure.Security.KeyVault.Certificates;
 
 namespace KeyVaultCA.Tests.KeyVault;
 
+/// <summary>
+/// Used to represent a version of a certificate in the <see cref="CertificateStore"/>.
+/// </summary>
 public class CertificateVersion
 {
     public required string Name { get; init; }
@@ -11,6 +14,5 @@ public class CertificateVersion
     public byte[]? Certificate { get; set; }
     public byte[]? CertSigningRequest { get; set; }
     public bool HasCompleted => Certificate != null;
-    
     public bool Enabled { get; set; } = true;
 }
