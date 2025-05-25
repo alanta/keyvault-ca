@@ -127,7 +127,7 @@ namespace KeyVaultCa.Core
                 // merge Root CA cert with the signed certificate
                 _logger.LogDebug("Merge Root CA certificate with the signed certificate.");
                 MergeCertificateOptions options =
-                    new MergeCertificateOptions(id, new[] { signedcert.Export(X509ContentType.Pkcs12) });
+                    new MergeCertificateOptions(id, [signedcert.Export(X509ContentType.Pkcs12)]);
                 var mergeResult = await _certificateClient.MergeCertificateAsync(options, ct);
 
                 return signedcert;
@@ -278,21 +278,6 @@ namespace KeyVaultCa.Core
                 throw new ArgumentException("No pending CSR on certificate.");
             }
 
-            /*
-            var requestedExtensions = pkcs10CertificationRequest.GetRequestedExtensions();
-            foreach (var oid in requestedExtensions.GetExtensionOids())
-            {
-
-                // TODO: implement extension handling
-                // 2.5.29.19 - Basic Constraints
-                // 2.5.29.37 - Extended key usage
-                // 2.5.29.15 - Key Usage
-                // 2.5.29.17 - Subject Alternative Name
-
-                _logger.LogInformation("Extension {oid} requested.", oid);
-            }*/
-
-
             var certBundle = await issuerKeyVault.GetCertificateAsync(issuerCertificateIdentifier.Name, ct)
                 .ConfigureAwait(false);
             if (certBundle.Value == null)
@@ -324,7 +309,14 @@ namespace KeyVaultCa.Core
             int? pathLength,
             CancellationToken ct)
         {
-            await _certificateClient.StartCreateCertificateAsync(certificateName, new CertificatePolicy("Unknown", subject, sans ), cancellationToken: ct);
+            var startOperation = await CheckForPendingOperations(certificateName, ct);
+
+            if (startOperation)
+            {
+                await _certificateClient.StartCreateCertificateAsync(certificateName,
+                    new CertificatePolicy("Unknown", subject, sans), cancellationToken: ct);
+            }
+
             var signedCert2 = await SignRequestAsync(
                 new Uri($"{_certificateClient.VaultUri}certificates/{certificateName}"),
                 new Uri($"{_certificateClient.VaultUri}certificates/{issuerCertificateName}"),
@@ -335,7 +327,7 @@ namespace KeyVaultCa.Core
                 extensions: [
                     new X509BasicConstraintsExtension(true, pathLength.HasValue, pathLength ?? 0, true),
                     new X509KeyUsageExtension(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.DigitalSignature, true),
-                    new X509EnhancedKeyUsageExtension{EnhancedKeyUsages = { new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth)}}
+                    new X509EnhancedKeyUsageExtension(new OidCollection(){ new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) }, false)
                 ],
                 ct);
             await _certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificateName, new []{signedCert2.RawData}), default);
@@ -350,7 +342,14 @@ namespace KeyVaultCa.Core
             SubjectAlternativeNames sans,
             CancellationToken ct)
         {
-            await _certificateClient.StartCreateCertificateAsync(certificateName, new CertificatePolicy("Unknown", subject, sans ), cancellationToken: ct);
+            var startOperation = await CheckForPendingOperations(certificateName, ct);
+
+            if (startOperation)
+            {
+                await _certificateClient.StartCreateCertificateAsync(certificateName,
+                    new CertificatePolicy("Unknown", subject, sans), cancellationToken: ct);
+            }
+
             var signedCert2 = await SignRequestAsync(
                 new Uri($"{_certificateClient.VaultUri}certificates/{certificateName}"),
                 new Uri($"{_certificateClient.VaultUri}certificates/{issuerCertificateName}"),
@@ -361,10 +360,46 @@ namespace KeyVaultCa.Core
                 extensions: [
                     new X509BasicConstraintsExtension(false, false, 0, true),
                     new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true),
-                    new X509EnhancedKeyUsageExtension{EnhancedKeyUsages = { new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth)}}
+                    new X509EnhancedKeyUsageExtension(new OidCollection(){ new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) }, false)
                 ],
                 ct);
             await _certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificateName, new []{signedCert2.RawData}), default);
+        }
+
+        /// <summary>
+        /// See if there are any pending operations for the given certificate name.
+        /// Cancels the operation if it is not completed and the issuer is not "Unknown".
+        /// </summary>
+        /// <param name="certificateName">The name of the certificate.</param>
+        /// <param name="ct">A cancellation token</param>
+        /// <returns>True if a new operation should be started.</returns>
+        private async Task<bool> CheckForPendingOperations(string certificateName, CancellationToken ct)
+        {
+            var startOperation = true;
+            try
+            {
+                var op = await _certificateClient.GetCertificateOperationAsync(certificateName, ct);
+                if (!(op.HasCompleted || string.Equals(op.Properties.Status, "completed", StringComparison.InvariantCulture)))
+                {
+                    _logger.LogWarning("Operation {operationId} is pending for certificate {certificateName}.",  op.Id, certificateName);
+                    if (op.Properties.IssuerName != "Unknown")
+                    {
+                        _logger.LogInformation("Cancelling pending operation {operationId}.", op.Id);
+                        await op.CancelAsync(ct);
+                    }
+                    else
+                    {
+                        startOperation = false;
+                    }
+                }
+            }
+            catch (RequestFailedException requestEx) when (requestEx.Status == 404)
+            {
+                // No pending operation found, continue
+                _logger.LogDebug("No pending operation found for certificate {certificateName}.", certificateName);
+            }
+
+            return startOperation;
         }
     }
 }
