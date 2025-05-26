@@ -13,13 +13,12 @@ using Azure.Security.KeyVault.Keys.Cryptography;
 
 namespace KeyVaultCA.Tests
 {
-    public class UnitTest1
+    public class IntegrationTests(ITestOutputHelper output)
     {
-        private readonly ITestOutputHelper _output;
-        private readonly ILoggerFactory _loggerFactory;
+        private readonly ILoggerFactory _loggerFactory = new XunitLoggerFactory(output);
 
         private readonly string keyVaultUrl = "https://mvv-kv-ca.vault.azure.net/";
-        private readonly static TokenCredential credential = CreateCredential();
+        private static readonly TokenCredential credential = CreateCredential();
 
         private static TokenCredential CreateCredential()
         {
@@ -33,12 +32,6 @@ namespace KeyVaultCA.Tests
                 ExcludeAzurePowerShellCredential = true,
                 ExcludeInteractiveBrowserCredential = true
             });
-        }
-
-        public UnitTest1(ITestOutputHelper output)
-        {
-            _output = output;
-            _loggerFactory = new XunitLoggerFactory(output);
         }
 
         [Fact(Skip = "Integration test")]
@@ -73,7 +66,7 @@ namespace KeyVaultCA.Tests
 
             cert.Should().NotBeNull();
 
-            _output.WriteLine(cert.ExportCertificatePem());
+            output.WriteLine(cert.ExportCertificatePem());
 
             //cert.NotAfter.Should().BeCloseTo(DateTime.Now.AddDays(30), TimeSpan.FromMinutes(5));
 
@@ -113,7 +106,7 @@ namespace KeyVaultCA.Tests
 
             cert.Should().NotBeNull();
 
-            _output.WriteLine(cert.ExportCertificatePem());
+            output.WriteLine(cert.ExportCertificatePem());
 
             cert.NotAfter.Should().BeBefore(DateTime.Now.AddDays(30));
             var basicConstraints = cert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
