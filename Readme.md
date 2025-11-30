@@ -36,14 +36,12 @@ You'll also need to login to Azure CLI and have a Key Vault ready to store the c
 - Create a CA certificate
 
 ```bash
-# Either embed the vault in the argument…
 keyvaultca create-ca-cert --common-name "KeyVault-ca" --duration 2y root-ca@my-ca-keyvault
-
-# …or keep using --key-vault when you prefer shorter names.
-keyvaultca create-ca-cert --key-vault my-ca-keyvault --common-name "KeyVault-ca" --duration 2y root-ca
 ```
 
-- Issue a leaf certificate
+> **Required permissions** (CA vault): Certificate Officer, Crypto User, and Secrets User.
+
+### Issue a leaf certificate
 ```bash
 # Issuer and leaf can now live in different vaults by using secret@vault syntax.
 keyvaultca issue-cert \
@@ -57,14 +55,66 @@ keyvaultca issue-cert \
 keyvaultca issue-cert --key-vault my-certs-keyvault --issuer root-ca --duration 90d device1
 ```
 
-- Renew a certificate
+> **Required permissions**: 
+> - Issuer vault: Crypto User (to sign) and Secrets User (to read the CA cert).
+> - Target vault (where the new certificate lives): Certificate Officer and Secrets User.
 
-Start a new version through the Azure portal. Then issue the certificate again.
+### Renew a certificate
 
-- Create an intermediate certificate
-- Create a leaf certificate
-- Download the certificates
-- Build a chain if needed
+Simply run `keyvaultca issue-cert` again with the same issuer/leaf references and a new validity window—the tool will create the next version for you (no Azure Portal pre-work required):
+
+```bash
+keyvaultca issue-cert \
+  --issuer root-ca@my-ca-keyvault \
+  --duration 90d \
+  device1@my-certs-keyvault
+```
+
+> **Required permissions**: same as issuing a new leaf certificate (Crypto + Secrets on the issuer vault, Certificate Officer + Secrets on the target vault).
+
+### Create an intermediate certificate
+
+If you want your leaf certificates to chain off an intermediate instead of the root, use `issue-intermediate-cert`. The issuer argument points to the parent CA while the `name` argument defines the intermediate certificate you are creating. Subject/SAN flags work exactly like `issue-cert` (defaults to `CN=<name>` if omitted).
+
+```bash
+# Create an intermediate in another vault so you can isolate issuing rights.
+keyvaultca issue-intermediate-cert \
+  --issuer root-ca@my-ca-keyvault \
+  --duration 365d \
+  --dns intermediate.alanta.local \
+  intermediate-ca@my-intermediate-vault
+
+# Or reuse the same vault via --key-vault
+keyvaultca issue-intermediate-cert --key-vault my-ca-keyvault --issuer root-ca intermediate-ca
+```
+
+After the intermediate is created, use it as the `--issuer` when issuing your leaf certificates.
+
+> **Required permissions**: 
+> - Parent CA vault: Crypto User and Secrets User.
+> - Intermediate vault (if different): Certificate Officer and Secrets User.
+
+### Download the certificates
+
+Use `download-cert` when you need to export a PEM (and optionally the private key) from Key Vault. The command always writes `<name>.pem`; pass `--key` if you also need `<name>.key` (RSA only for now).
+
+```bash
+# Export just the certificate
+keyvaultca download-cert --key-vault my-certs-keyvault device1
+
+# Export the certificate plus the private key (PEM PKCS8)
+keyvaultca download-cert --key-vault my-certs-keyvault --key device1
+
+# Full vault URI works too
+# Full vault URI works too
+keyvaultca download-cert --key-vault https://my-certs-keyvault.vault.azure.net/ device1
+```
+
+The files land in the current directory; move them into your chain/keystore workflow as needed.
+
+> **Required permissions**: Secrets User on the vault that stores the certificate (Certificate Officer is not needed for read-only export).
+
+### Build a chain if needed
 
 ## References
 - [Create and merge a certificate signing request in Key Vault](https://learn.microsoft.com/en-us/azure/key-vault/certificates/create-certificate-signing-request?tabs=azure-powershell#add-more-information-to-the-csr)
