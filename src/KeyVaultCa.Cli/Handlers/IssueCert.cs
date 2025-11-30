@@ -23,9 +23,9 @@ public class IssueCert(ILoggerFactory loggerFactory)
         cmd.Description = "Issues a certificate in a Key Vault.";
         cmd.HelpOption(inherited: true);
         
-        var kvOption = cmd.Option("-kv|--key-vault <KEY_VAULT>", "The name or full URL of the Key Vault", CommandOptionType.SingleValue).IsRequired();
-        var issuerArgument = cmd.Argument<string>("issuer", "The name of the issuer certificate").IsRequired();
-        var nameArgument = cmd.Argument<string>("name", "The name of the certificate").IsRequired();
+        var kvOption = cmd.Option<string>("-kv|--key-vault <KEY_VAULT>", "The default Key Vault name or full URL to use when certificate arguments omit a vault reference.", CommandOptionType.SingleValue);
+        var issuerArgument = cmd.Argument<string>("issuer", "Issuer reference (name, secret@vault, or full URI).").IsRequired();
+        var nameArgument = cmd.Argument<string>("name", "Certificate reference (name, secret@vault, or full URI).").IsRequired();
         
         var notBeforeOption = cmd.AddNotBeforeOption();
         var notAfterOption = cmd.AddNotAfterOption();
@@ -37,8 +37,8 @@ public class IssueCert(ILoggerFactory loggerFactory)
         
         cmd.OnExecuteAsync(async cancellationToken =>
         {
-            var issuer = KeyVaultSecretReference.FromNames(kvOption.Value()!, issuerArgument.Value!);
-            var cert = KeyVaultSecretReference.FromNames(kvOption.Value()!, nameArgument.Value!);
+            var issuer = CommonOptions.ResolveSecretReference(cmd, kvOption, issuerArgument.Value!, "issuer");
+            var cert = CommonOptions.ResolveSecretReference(cmd, kvOption, nameArgument.Value!, "name");
             
             var san = CommonOptions.ParseSubjectAlternativeNames(dnsOption, emailOption, upnOption);
             

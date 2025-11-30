@@ -22,8 +22,8 @@ public class CreateCACert(ILoggerFactory loggerFactory)
         cmd.Description = "Creates a CA certificate in a Key Vault.";
         cmd.HelpOption(inherited: true);
         
-        var kvOption = cmd.Option("-kv|--key-vault <KEY_VAULT>", "The name or full URL of the Key Vault", CommandOptionType.SingleValue).IsRequired();
-        var nameArgument = cmd.Argument<string>("name", "The name of the certificate").IsRequired();
+        var kvOption = cmd.Option<string>("-kv|--key-vault <KEY_VAULT>", "The default Key Vault name or full URL to use when certificate arguments omit a vault reference.", CommandOptionType.SingleValue);
+        var nameArgument = cmd.Argument<string>("name", "The certificate reference (name, secret@vault, or full URI).").IsRequired();
         var commonNameOption = cmd.Option("-cn|--common-name <COMMON_NAME>", "The common name of the certificate", CommandOptionType.SingleValue);
         var notBeforeOption = cmd.AddNotBeforeOption();
         var notAfterOption = cmd.AddNotAfterOption();
@@ -31,7 +31,7 @@ public class CreateCACert(ILoggerFactory loggerFactory)
         
         cmd.OnExecuteAsync(async cancellationToken =>
         {
-            var cert = KeyVaultSecretReference.FromNames(kvOption.Value()!, nameArgument.Value!);
+            var cert = CommonOptions.ResolveSecretReference(cmd, kvOption, nameArgument.Value!, "name");
             
             var (notBefore, notAfter) = CommonOptions.DetermineValidityPeriod(
                 notBeforeOption,

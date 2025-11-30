@@ -25,7 +25,7 @@ The core library has most of the required functionality:
 
 ## Work breakdown
 * [ ] Clear out unused code, restructure to make it more intuitive
-* [ ] Use different KeyVault for CA and leaf certs
+* [x] Use different KeyVault for CA and leaf certs
 * Add CLI project
   * [x] Create CA cert
   * [x] Issue Intermediate cert
@@ -34,7 +34,7 @@ The core library has most of the required functionality:
   * [x] Download cert (optionally with key, as that is needed for some scenarios)
   * [ ] Revoke cert
   * [ ] Specify key parameters (key size, key type)
-  * [ ] Specify cert parameters (subject, validity, SAN)
+  * [x] Specify cert parameters (subject, validity, SAN)
   * [ ] Support PKCS12 format (.pfx)
   * [x] Support PKCS8 / PEM format (.pem, .crt and ,key)
   * [ ] Support DER format (.der, .crt and .key)

@@ -36,12 +36,25 @@ You'll also need to login to Azure CLI and have a Key Vault ready to store the c
 - Create a CA certificate
 
 ```bash
-keyvaultca create-ca-cert --common-name "KeyVault-ca" --duration 2y my-ca-keyvault/root-ca
+# Either embed the vault in the argument…
+keyvaultca create-ca-cert --common-name "KeyVault-ca" --duration 2y root-ca@my-ca-keyvault
+
+# …or keep using --key-vault when you prefer shorter names.
+keyvaultca create-ca-cert --key-vault my-ca-keyvault --common-name "KeyVault-ca" --duration 2y root-ca
 ```
 
 - Issue a leaf certificate
 ```bash
-keyvaultca issue-cert --issuer my-ca-keyvault/root-ca --duration 90d --start 20250401 --san device1 --dns device1.alanta.local my-certs-keyvault/device1
+# Issuer and leaf can now live in different vaults by using secret@vault syntax.
+keyvaultca issue-cert \
+  --issuer root-ca@my-ca-keyvault \
+  --duration 90d \
+  --not-before 2025-04-01T00:00:00Z \
+  --dns device1.alanta.local --dns device1 \
+  device1@my-certs-keyvault
+
+# If both certs share a vault you can still rely on --key-vault.
+keyvaultca issue-cert --key-vault my-certs-keyvault --issuer root-ca --duration 90d device1
 ```
 
 - Renew a certificate

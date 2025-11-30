@@ -1,6 +1,7 @@
 using System.Globalization;
 using Azure.Security.KeyVault.Certificates;
 using KeyVaultCa.Cli.Validators;
+using KeyVaultCa.Core;
 using McMaster.Extensions.CommandLineUtils;
 
 namespace KeyVaultCa.Cli.Handlers;
@@ -95,5 +96,25 @@ public static class CommonOptions
         }
 
         return san;
+    }
+
+    public static KeyVaultSecretReference ResolveSecretReference(
+        CommandLineApplication app,
+        CommandOption<string> keyVaultOption,
+        string value,
+        string parameterName)
+    {
+        if (KeyVaultSecretReference.TryParse(value, out var parsedReference))
+        {
+            return parsedReference!;
+        }
+
+        if (!keyVaultOption.HasValue())
+        {
+            throw new CommandParsingException(app,
+                $"The {parameterName} must either include a vault reference (secret@vault) or you must provide --key-vault.");
+        }
+
+        return KeyVaultSecretReference.FromNames(keyVaultOption.Value()!, value);
     }
 }
