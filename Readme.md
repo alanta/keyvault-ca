@@ -1,105 +1,138 @@
-# Offline Certificate Authority
+# KeyVault Certificate Authority
 
-This repository demonstrates how to setup an offline Certificate Authority for an internal domain.
-It is used to sign certificates for your local domain names, used in a private network within, for example, in Azure.
+This repository contains a .NET library and CLI that help you run a small Certificate Authority entirely inside Azure Key Vault. All key material stays in Key Vault; the tooling orchestrates certificate creation, issuance, and renewal by driving the Key Vault APIs for you.
 
-A reason for having this is could be that an application gateway can be made to trust internal services by adding the root certificate to the trusted root store of the application gateway.
-This is similar to what is described in [this article](https://learn.microsoft.com/en-us/azure/application-gateway/self-signed-certificates). However, we want to have the certificates managed in Azure Key Vault.
-This enables services that use internal certificates, like API Management to automatically reload renewed certificates without down time.
+Today the toolset covers the basics needed for internal mTLS deployments: create a root CA, issue intermediates or end-entity certificates (across multiple vaults if desired), renew existing certs, and download PEM/PKCS8 material for distribution. Features such as certificate revocation, PKCS12 export, and automated renewal workers are still on the backlog, and the README calls out workarounds where needed (for example, building a certificate chain manually).
+
+Typical scenarios include:
+* Application Gateway needs to communicate with Azure API Management using mTLS
+* Event Grid MQTT with certificate authentication
+* Services communicating with each other using mTLS
+
+Keeping certificates in Key Vault means you avoid managing private keys on developer machines and can drive issuance from automation such as Azure Pipelines or GitHub Actions. The CLI commands described below are script-friendly and make it easy to renew or reissue certificates as part of your existing deployment workflows.
 
 ## Setup
 
 Please make sure these tools are installed:
 
-- [Step CLI](https://smallstep.com/docs/step-cli/installation/) - This is used to manage the CA and issue certificates.  
-  Setup by running `winget install Smallstep.step`
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) - used to manage the certificates into Azure Key Vault
-- [Powershell 7+](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell?view=powershell-7.1) - used to run the scripts in this repository
-
-Note that you'll need to restart your shell after installing these tools to update the path variable. If you have Chocolatey installed, you can run `refreshenv` to update the path variable.
+- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) - used to authenticate to Azure
+- [Dotnet 8](https://dotnet.microsoft.com/download/dotnet/8.0) - used to build the tools
+- An Azure subscription with Key Vault enabled and sufficient permissions to either create resources and grant rights on them,
+  or, an existing KeyVault with sufficient permissions to create and manage certificates and read secrets.
 
 You'll also need to login to Azure CLI and have a Key Vault ready to store the certificates in.
 
 ## Setup an offline CA
 
-This CA was initialized by running the following command:
+- Setup resources, assign roles
+  - Create 2 Key Vaults, one for the CA and one for the leaf certificates
+  - Ensure you have the following permissions:
+    - Certificate Officer - allows you to create and update certificates
+    - Crypto User - allows you to sign data using keys stored in Key Vault
+    - Secrets User - allows you to read secrets from Key Vault, including certificates and keys
 
-```powershell
-$ENV:STEPPATH="$PWD/ca"
-mkdir $PWD/ca
-step ca init --deployment-type standalone --name MyLocalDomain --dns mycompany.local --address 127.0.0.1:443 --provisioner MyCompany 
+- Create a CA certificate
+
+```bash
+keyvaultca create-ca-cert --common-name "KeyVault-ca" --duration 2y root-ca@my-ca-keyvault
 ```
 
-This generates a root and intermediate certificate under `ca/certs`. The keys are under `ca/secrets`.
-The CA certs are valid for 10 years.
+> **Required permissions** (CA vault): Certificate Officer, Crypto User, and Secrets User.
 
-If you follow these steps to create a new CA, make sure you keep the generated passwords safe! You'll need them to prepare the CA certificates to Azure later.
+### Issue a leaf certificate
+```bash
+# Issuer and leaf can now live in different vaults by using secret@vault syntax.
+keyvaultca issue-cert \
+  --issuer root-ca@my-ca-keyvault \
+  --duration 90d \
+  --not-before 2025-04-01T00:00:00Z \
+  --dns device1.alanta.local --dns device1 \
+  device1@my-certs-keyvault
 
-The secrets generated for this CA must *not* be checked in to source control. Once the certificates have been pushed to Key Vault, the secrets should be deleted and passwords are no longer needed.
-
-## Upload CA certificates to Azure Key Vault
-
-For use in Azure, we need to create PFX files from the certificates. The .pfx files must *not* have encrypted keys. Azure CLI cannot import encrypted keys into Key Vault.
-
-```powershell
-step certificate p12 --no-password --insecure root_ca.pfx .\ca\certs\root_ca.crt .\ca\secrets\root_ca_key
-step certificate p12 --no-password --insecure intermediate_ca.pfx .\ca\certs\intermediate_ca.crt .\ca\secrets\intermediate_ca_key
+# If both certs share a vault you can still rely on --key-vault.
+keyvaultca issue-cert --key-vault my-certs-keyvault --issuer root-ca --duration 90d device1
 ```
 
-Next, import the certificates into Key Vault.
+> **Required permissions**: 
+> - Issuer vault: Crypto User (to sign) and Secrets User (to read the CA cert).
+> - Target vault (where the new certificate lives): Certificate Officer and Secrets User.
 
-```powershell
-az keyvault certificate import --vault-name my-kv-name  -n mycompany-local-intermediate -f .\.\ca\certs\intermediate_ca.pfx 
-az keyvault certificate import --vault-name my-kv-name  -n mycompany-local-root -f .\ca\certs\root_ca.pfx
+### Renew a certificate
+
+Simply run `keyvaultca issue-cert` again with the same issuer/leaf references and a new validity window—the tool will create the next version for you (no Azure Portal pre-work required):
+
+```bash
+keyvaultca issue-cert \
+  --issuer root-ca@my-ca-keyvault \
+  --duration 90d \
+  device1@my-certs-keyvault
 ```
 
-You're now ready to issue certificates for the `mycompany.local` domain from your Key Vault.
+> **Required permissions**: same as issuing a new leaf certificate (Crypto + Secrets on the issuer vault, Certificate Officer + Secrets on the target vault).
 
-## Managing Certificates using the offline CA
+### Create an intermediate certificate
 
-With the CA certs stored in KeyVault, we can start requesting certificates and signing them.
+If you want your leaf certificates to chain off an intermediate instead of the root, use `issue-intermediate-cert`. The issuer argument points to the parent CA while the `name` argument defines the intermediate certificate you are creating. Subject/SAN flags work exactly like `issue-cert` (defaults to `CN=<name>` if omitted).
 
-### Issue a certificate from Key Vault
+```bash
+# Create an intermediate in another vault so you can isolate issuing rights.
+keyvaultca issue-intermediate-cert \
+  --issuer root-ca@my-ca-keyvault \
+  --duration 365d \
+  --dns intermediate.alanta.local \
+  intermediate-ca@my-intermediate-vault
 
-To issue a certificate, start by creating a new certificate request in Azure Key Vault. Make sure you specify you want to use a *non-integrated CA*.
-
-![Create a certificate request](./Docs/portal-create-csr.png)
-
-Now use the `SignCSR.ps1` script to sign the CSR. This script will download the CSR from Key Vault, sign it using the CA certificates and upload the signed certificate back to Key Vault.
-
-```powershell
-.\SignCSR.ps1 -keyVaultName my-kv-name -certificateName mycompany-local-portal -intermediateName  mycompany-local-intermediate
+# Or reuse the same vault via --key-vault
+keyvaultca issue-intermediate-cert --key-vault my-ca-keyvault --issuer root-ca intermediate-ca
 ```
 
-### Renew a Key Vayult certificate
+After the intermediate is created, use it as the `--issuer` when issuing your leaf certificates.
 
-To renew a certificate, find the certificate in the Key Vault in Azure Portal, select it and on the version overview click the *New Version* button. This will set the certificate to *Pending* status. You can now use the `SignCSR.ps1` script to sign the CSR again.
+> **Required permissions**: 
+> - Parent CA vault: Crypto User and Secrets User.
+> - Intermediate vault (if different): Certificate Officer and Secrets User.
 
-### Generate a certificate without a CSR
+### Download the certificates
 
-Using the CA certificates, we can generate a wildcard certificate for the `mycompany.local` domain. Note that the output is a bundle of the certificate and the intermediate certificate.
+Use `download-cert` when you need to export a PEM (and optionally the private key) from Key Vault. The command always writes `<name>.pem`; pass `--key` if you also need `<name>.key` (RSA only for now).
 
-```powershell
-$ENV:STEPPATH="$PWD/ca"
-step certificate create *.mycompany.local wildcard.crt wildcard.key `
-    --profile leaf --not-after=8760h `
-    --ca ./ca/certs/intermediate_ca.crt --ca-key ./ca/secrets/intermediate_ca_key --bundle
+```bash
+# Export just the certificate
+keyvaultca download-cert --key-vault my-certs-keyvault device1
+
+# Export the certificate plus the private key (PEM PKCS8)
+keyvaultca download-cert --key-vault my-certs-keyvault --key device1
+
+# Full vault URI works too
+# Full vault URI works too
+keyvaultca download-cert --key-vault https://my-certs-keyvault.vault.azure.net/ device1
 ```
 
-To make the certificate chain complete, we need to add the root certificate to the bundle:
+The files land in the current directory; move them into your chain/keystore workflow as needed.
 
-```powershell
-cat ./ca/certs/root_ca.crt >> wildcard.crt
+> **Required permissions**: Secrets User on the vault that stores the certificate (Certificate Officer is not needed for read-only export).
+
+### Build a chain if needed
+
+The CLI doesn’t build a full PEM bundle yet, but you can assemble one manually once the certificates are exported:
+
+1. Download each certificate you need in the chain (leaf, intermediate(s), root) with `keyvaultca download-cert`.
+2. Concatenate them in order (leaf first, root last):
+
+  ```bash
+  cat device1.pem intermediate-ca.pem root-ca.pem > device1-chain.pem
+  ```
+
+3. Use the combined file anywhere a full chain is required (App Gateway, MQTT broker, etc.).
+
+If you also need PKCS12 (`.pfx`), use OpenSSL locally for now:
+
+```bash
+openssl pkcs12 -export -out device1.pfx -inkey device1.key -in device1.pem -certfile intermediate-ca.pem -certfile root-ca.pem
 ```
 
-### Verify certificates
-
-```powershell
-step certificate verify .\wildcard.crt --roots ".\ca\certs\root_ca.crt,.\ca\certs\intermediate_ca.crt"
-step certificate verify https://apim-dev.mycompany.local/some-api/api/some-endpoint --roots ".\ca\certs\root_ca.crt,.\ca\certs\intermediate_ca.crt"
-```
+> **Required permissions**: whatever was needed to download the individual certificates (Secrets User on each vault). The concatenation/OpenSSL steps run locally.
 
 ## References
-- [Step : Basic Operations](https://smallstep.com/docs/step-cli/basic-crypto-operations/)
 - [Create and merge a certificate signing request in Key Vault](https://learn.microsoft.com/en-us/azure/key-vault/certificates/create-certificate-signing-request?tabs=azure-powershell#add-more-information-to-the-csr)
 - [Application Gateway : Generate an Azure Application Gateway self-signed certificate with a custom root CA](https://learn.microsoft.com/en-us/azure/application-gateway/self-signed-certificates)

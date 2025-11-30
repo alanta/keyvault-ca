@@ -1,0 +1,44 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{804344C0-CB56-424F-BD47-C2F5FA27432C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KeyVaultCa.Core", "src\KeyVaultCa.Core\KeyVaultCa.Core.csproj", "{1CF23629-1F20-48FD-B3FD-8502EA5047E4}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KeyVaultCa.Tests", "src\KeyVaultCa.Tests\KeyVaultCa.Tests.csproj", "{DCC66F26-5FC4-46B6-A246-F13EED31EE16}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyVaultCa.Cli", "src\KeyVaultCa.Cli\KeyVaultCa.Cli.csproj", "{F028A761-9AA1-413A-8ADB-CA48AD28EECB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1CF23629-1F20-48FD-B3FD-8502EA5047E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1CF23629-1F20-48FD-B3FD-8502EA5047E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1CF23629-1F20-48FD-B3FD-8502EA5047E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1CF23629-1F20-48FD-B3FD-8502EA5047E4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DCC66F26-5FC4-46B6-A246-F13EED31EE16}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DCC66F26-5FC4-46B6-A246-F13EED31EE16}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DCC66F26-5FC4-46B6-A246-F13EED31EE16}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DCC66F26-5FC4-46B6-A246-F13EED31EE16}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F028A761-9AA1-413A-8ADB-CA48AD28EECB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F028A761-9AA1-413A-8ADB-CA48AD28EECB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F028A761-9AA1-413A-8ADB-CA48AD28EECB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F028A761-9AA1-413A-8ADB-CA48AD28EECB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{1CF23629-1F20-48FD-B3FD-8502EA5047E4} = {804344C0-CB56-424F-BD47-C2F5FA27432C}
+		{DCC66F26-5FC4-46B6-A246-F13EED31EE16} = {804344C0-CB56-424F-BD47-C2F5FA27432C}
+		{F028A761-9AA1-413A-8ADB-CA48AD28EECB} = {804344C0-CB56-424F-BD47-C2F5FA27432C}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {459798BD-437A-4B64-A0D4-6845682EC217}
+	EndGlobalSection
+EndGlobal

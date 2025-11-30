@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>keyvaultca</ToolCommandName>
+        <PackageOutputPath>./nupkg</PackageOutputPath>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="McMaster.Extensions.Hosting.CommandLine" />
+      <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+      <PackageReference Include="Microsoft.Extensions.Hosting" />
+      <PackageReference Include="Microsoft.Extensions.Logging" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\KeyVaultCa.Core\KeyVaultCa.Core.csproj" />
+    </ItemGroup>
+
+</Project>
