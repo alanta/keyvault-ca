@@ -1,0 +1,85 @@
+name: "Bug report"
+description: "Report something that is broken or misbehaving"
+title: "bug: <short description>"
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to help! Please answer each question so we can reproduce the issue.
+  - type: input
+    id: summary
+    attributes:
+      label: Issue summary
+      description: One or two sentences describing the problem.
+      placeholder: CLI throws when issuing certs from intermediate CA
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal, complete set of steps or script the team can run.
+      placeholder: |
+        1. Run `keyvaultca issue-cert ...`
+        2. Observe error message
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Include exact error text if possible.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste relevant console output, stack traces, or attach screenshots. Use fenced code blocks for logs.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: e.g., release tag or `git rev-parse HEAD`.
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Select anything that applies.
+      multiple: true
+      options:
+        - Windows
+        - macOS
+        - Linux (WSL)
+        - Linux (native)
+        - GitHub Actions
+        - Other (describe below)
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Any other info, mitigations, or related issues.
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues and Discussions for duplicates.
+          required: true
+        - label: This issue is not a security vulnerability (see SECURITY.md for reporting instructions).
+          required: true
+        - label: I can reproduce this issue using the latest `main` branch.
+          required: true
