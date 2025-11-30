@@ -15,6 +15,9 @@ env:
 
 jobs:
   build-test:
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: "📥 Checkout"
@@ -44,29 +47,41 @@ jobs:
           dotnet test ${{ env.SOLUTION_FILE }} \
             --configuration Release \
             --no-build \
+            --verbosity normal \
+            --collect "XPlat Code Coverage" \
             --logger "trx;LogFileName=test-results.trx" \
-            --results-directory TestResults \
-            --collect "XPlat Code Coverage"
-
-      - name: "🧹 Gather coverage files"
-        if: always()
-        run: |
-          set -eo pipefail
-          mkdir -p TestResults/coverage
-          find TestResults -name 'coverage.cobertura.xml' -print -exec cp {} TestResults/coverage/ \;
+            --results-directory coverage
 
       - name: "⬆️ Upload test results"
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: TestResults
+          path: coverage
           if-no-files-found: warn
 
-      - name: "📊 Upload coverage"
+      - name: "📈 Coverage summary"
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: irongut/CodeCoverageSummary@v1.3.0
         with:
-          name: coverage
-          path: TestResults/coverage/
-          if-no-files-found: warn
+          filename: coverage/*/coverage.cobertura.xml
+          badge: true
+          format: markdown
+          output: both
+
+      - name: "📝 Publish coverage summary"
+        if: always()
+        run: |
+          if [ -f code-coverage-results.md ]; then
+            cat code-coverage-results.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Coverage summary unavailable." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: "💬 Comment coverage on PR"
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          recreate: true
+          path: code-coverage-results.md
