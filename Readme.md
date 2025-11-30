@@ -1,17 +1,15 @@
-# Offline Certificate Authority
+# KeyVault Certificate Authority
 
-This repository demonstrates how to set up an offline Certificate Authority for an internal domain.
-It can be used to sign certificates for your local domain names, used in a private network within, for example in Azure.
-The main purpose of this is to facilitate the use of mTLS in Azure services, where the certificates are managed in Azure Key Vault.
+This repository contains a .NET library and CLI that help you run a small Certificate Authority entirely inside Azure Key Vault. All key material stays in Key Vault; the tooling orchestrates certificate creation, issuance, and renewal by driving the Key Vault APIs for you.
 
-Scenarios where this could be useful are:
+Today the toolset covers the basics needed for internal mTLS deployments: create a root CA, issue intermediates or end-entity certificates (across multiple vaults if desired), renew existing certs, and download PEM/PKCS8 material for distribution. Features such as certificate revocation, PKCS12 export, and automated renewal workers are still on the backlog, and the README calls out workarounds where needed (for example, building a certificate chain manually).
+
+Typical scenarios include:
 * Application Gateway needs to communicate with Azure API Management using mTLS
 * Event Grid MQTT with certificate authentication
 * Services communicating with each other using mTLS
 
-In real life we don't want to use self-signed certificates, and we definitely don't want to manage the certificates manually on our machines.
-This repository has tooling you can use to easily manage the certificates in Azure Key Vault, without any private keys ever leaving that service.
-The provided tools support automating the process of issuing and renewing certificates, and can be used in Azure Pipelines, GitHub Actions or other automation scenarios.
+Keeping certificates in Key Vault means you avoid managing private keys on developer machines and can drive issuance from automation such as Azure Pipelines or GitHub Actions. The CLI commands described below are script-friendly and make it easy to renew or reissue certificates as part of your existing deployment workflows.
 
 ## Setup
 
