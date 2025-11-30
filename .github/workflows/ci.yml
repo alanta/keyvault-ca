@@ -46,9 +46,14 @@ jobs:
             --no-build \
             --logger "trx;LogFileName=test-results.trx" \
             --results-directory TestResults \
-            /p:CollectCoverage=true \
-            /p:CoverletOutputFormat=cobertura \
-            /p:CoverletOutput=TestResults/coverage/
+            --collect "XPlat Code Coverage"
+
+      - name: "🧹 Gather coverage files"
+        if: always()
+        run: |
+          set -eo pipefail
+          mkdir -p TestResults/coverage
+          find TestResults -name 'coverage.cobertura.xml' -print -exec cp {} TestResults/coverage/ \;
 
       - name: "⬆️ Upload test results"
         if: always()
@@ -56,7 +61,7 @@ jobs:
         with:
           name: test-results
           path: TestResults
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
       - name: "📊 Upload coverage"
         if: always()
