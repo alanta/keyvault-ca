@@ -116,6 +116,25 @@ The files land in the current directory; move them into your chain/keystore work
 
 ### Build a chain if needed
 
+The CLI doesn’t build a full PEM bundle yet, but you can assemble one manually once the certificates are exported:
+
+1. Download each certificate you need in the chain (leaf, intermediate(s), root) with `keyvaultca download-cert`.
+2. Concatenate them in order (leaf first, root last):
+
+  ```bash
+  cat device1.pem intermediate-ca.pem root-ca.pem > device1-chain.pem
+  ```
+
+3. Use the combined file anywhere a full chain is required (App Gateway, MQTT broker, etc.).
+
+If you also need PKCS12 (`.pfx`), use OpenSSL locally for now:
+
+```bash
+openssl pkcs12 -export -out device1.pfx -inkey device1.key -in device1.pem -certfile intermediate-ca.pem -certfile root-ca.pem
+```
+
+> **Required permissions**: whatever was needed to download the individual certificates (Secrets User on each vault). The concatenation/OpenSSL steps run locally.
+
 ## References
 - [Create and merge a certificate signing request in Key Vault](https://learn.microsoft.com/en-us/azure/key-vault/certificates/create-certificate-signing-request?tabs=azure-powershell#add-more-information-to-the-csr)
 - [Application Gateway : Generate an Azure Application Gateway self-signed certificate with a custom root CA](https://learn.microsoft.com/en-us/azure/application-gateway/self-signed-certificates)
