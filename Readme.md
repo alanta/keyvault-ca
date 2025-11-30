@@ -11,6 +11,10 @@ Typical scenarios include:
 
 Keeping certificates in Key Vault means you avoid managing private keys on developer machines and can drive issuance from automation such as Azure Pipelines or GitHub Actions. The CLI commands described below are script-friendly and make it easy to renew or reissue certificates as part of your existing deployment workflows.
 
+## Repository automation
+
+GitHub Actions runs a basic build/test workflow (`.github/workflows/ci.yml`) on pushes and pull requests targeting `main`. Dependabot (`.github/dependabot.yml`) keeps NuGet packages and workflow actions up to date with weekly checks. Please leave these automations enabled so we can catch regressions and security issues early.
+
 ## Setup
 
 Please make sure these tools are installed:
@@ -22,7 +26,7 @@ Please make sure these tools are installed:
 
 You'll also need to login to Azure CLI and have a Key Vault ready to store the certificates in.
 
-## Setup an offline CA
+## Setup an offline CA 
 
 - Setup resources, assign roles
   - Create 2 Key Vaults, one for the CA and one for the leaf certificates
@@ -104,7 +108,7 @@ keyvaultca download-cert --key-vault my-certs-keyvault device1
 keyvaultca download-cert --key-vault my-certs-keyvault --key device1
 
 # Full vault URI works too
-# Full vault URI works too
+
 keyvaultca download-cert --key-vault https://my-certs-keyvault.vault.azure.net/ device1
 ```
 
@@ -136,3 +140,11 @@ openssl pkcs12 -export -out device1.pfx -inkey device1.key -in device1.pem -cert
 ## References
 - [Create and merge a certificate signing request in Key Vault](https://learn.microsoft.com/en-us/azure/key-vault/certificates/create-certificate-signing-request?tabs=azure-powershell#add-more-information-to-the-csr)
 - [Application Gateway : Generate an Azure Application Gateway self-signed certificate with a custom root CA](https://learn.microsoft.com/en-us/azure/application-gateway/self-signed-certificates)
+
+## Contributing
+
+Interested in helping? Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) for details on our development workflow, coding conventions, and how to propose changes safely.
+
+## Security
+
+If you discover a vulnerability or have questions about security, follow the guidance outlined in [`SECURITY.md`](SECURITY.md) so we can respond quickly and keep our users safe.
