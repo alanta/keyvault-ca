@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Keys.Cryptography;
@@ -21,13 +22,13 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
         var certificateClient = certificateOperations.GetFakeCertificateClient();
         
         var cryptographyClient = A.Fake<CryptographyClient>();
-        var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
+        var kvServiceClient = new KeyVaultServiceOrchestrator(_ => certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
         var today = DateTimeOffset.UtcNow.Date;
 
-        await kvCertProvider.CreateCACertificateAsync(
-            "UnitTestCA", 
+        await kvCertProvider.CreateRootCertificate(
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestCA"), 
             "CN=UnitTestCA", 
             today.AddDays(-1),  
             today.AddDays(120), 
@@ -35,8 +36,8 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
             ct);
 
         await kvCertProvider.IssueCertificate(
-            "UnitTestCA", 
-            "RenewMe",
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestCA"),
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "RenewMe"), 
             "CN=test.local", 
             today, 
             today.AddDays(30),
@@ -52,9 +53,9 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
         // It should create a new key (NIST recommendation)
         
         // Load the existing certificate from keyvault
-        //var cert = await kvServiceClient.GetCertificateAsync("RenewMe", ct);
-        await kvServiceClient.IssueCertificateAsync("UnitTestCA",
-            "RenewMe",
+        await kvServiceClient.IssueCertificateAsync(
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestCA"),
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "RenewMe"), 
             "CN=test.local",
             today.AddDays(30),
             today.AddDays(60),
@@ -78,18 +79,109 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
         x509Renewed.NotAfter.Should().Be(today.AddDays(60));
     }
 
+    [Fact]
     public async Task It_should_cancel_pending_operation_for_other_issuer()
     {
-        // TODO
+        // Arrange
+        var ct = CancellationToken.None;
+        var certificateStore = new CertificateStore();
+        var certificateClient = certificateStore.GetFakeCertificateClient();
+        var cryptographyClient = A.Fake<CryptographyClient>();
+        var kvServiceClient = new KeyVaultServiceOrchestrator(_ => certificateClient, _ => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
+        var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
+
+        var today = DateTimeOffset.UtcNow.Date;
+
+        await kvCertProvider.CreateRootCertificate(
+            new KeyVaultSecretReference(certificateStore.VaultUri, "UnitTestCA"),
+            "CN=UnitTestCA",
+            today.AddDays(-1),
+            today.AddDays(120),
+            1,
+            ct);
+
+        // Simulate a pending operation created with a different issuer (e.g. manually via portal)
+        var pendingPolicy = new CertificatePolicy("Self", "CN=test.local", new SubjectAlternativeNames
+        {
+            DnsNames = { "pending.test.local" }
+        });
+        await certificateClient.StartCreateCertificateAsync("RenewMe", pendingPolicy, true, null, ct);
+
+        var pendingVersion = certificateStore.CertificateVersions.Single(v => v.Name == "RenewMe");
+        pendingVersion.HasCompleted = false;
+        pendingVersion.Certificate = null;
+
+        // Act
+        Func<Task> issueTask = () => kvCertProvider.IssueCertificate(
+            new KeyVaultSecretReference(certificateStore.VaultUri, "UnitTestCA"),
+            new KeyVaultSecretReference(certificateStore.VaultUri, "RenewMe"),
+            "CN=test.local",
+            today,
+            today.AddDays(30),
+            new SubjectAlternativeNames
+            {
+                DnsNames = { "test.local" }
+            },
+            ct);
+
+        // Assert
+        await issueTask.Should().NotThrowAsync("pending operations from other issuers should be cancelled before issuing");
+
+        var versions = certificateStore.CertificateVersions.Where(v => v.Name == "RenewMe").ToList();
+        versions.Should().HaveCount(1);
+        versions[0].HasCompleted.Should().BeTrue();
     }
     
+    [Fact]
     public async Task It_should_continue_pending_operation()
     {
-        // TODO
-    }
-    
-    public async Task It_should_not_allow_overlapping_validity_periods()
-    {
-        // TODO
+        // Arrange
+        var ct = CancellationToken.None;
+        var certificateStore = new CertificateStore();
+        var certificateClient = certificateStore.GetFakeCertificateClient();
+        var cryptographyClient = A.Fake<CryptographyClient>();
+        var kvServiceClient = new KeyVaultServiceOrchestrator(_ => certificateClient, _ => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
+        var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
+
+        var today = DateTimeOffset.UtcNow.Date;
+
+        await kvCertProvider.CreateRootCertificate(
+            new KeyVaultSecretReference(certificateStore.VaultUri, "UnitTestCA"),
+            "CN=UnitTestCA",
+            today.AddDays(-1),
+            today.AddDays(120),
+            1,
+            ct);
+
+        // Simulate an earlier issuance that left a pending CSR with issuer Unknown (the orchestrator's default)
+        var pendingPolicy = new CertificatePolicy("Unknown", "CN=test.local", new SubjectAlternativeNames
+        {
+            DnsNames = { "test.local" }
+        });
+        await certificateClient.StartCreateCertificateAsync("RenewMe", pendingPolicy, true, null, ct);
+
+        var pendingVersion = certificateStore.CertificateVersions.Single(v => v.Name == "RenewMe");
+        pendingVersion.HasCompleted.Should().BeFalse();
+
+        // Act
+        Func<Task> issueTask = () => kvCertProvider.IssueCertificate(
+            new KeyVaultSecretReference(certificateStore.VaultUri, "UnitTestCA"),
+            new KeyVaultSecretReference(certificateStore.VaultUri, "RenewMe"),
+            "CN=test.local",
+            today,
+            today.AddDays(30),
+            new SubjectAlternativeNames
+            {
+                DnsNames = { "test.local" }
+            },
+            ct);
+
+        // Assert
+        await issueTask.Should().NotThrowAsync("pending operations with issuer Unknown should be continued");
+
+        var versions = certificateStore.CertificateVersions.Where(v => v.Name == "RenewMe").ToList();
+        versions.Should().HaveCount(1, "continuing should reuse the existing pending operation");
+        versions[0].HasCompleted.Should().BeTrue();
+        versions[0].Certificate.Should().NotBeNull();
     }
 }

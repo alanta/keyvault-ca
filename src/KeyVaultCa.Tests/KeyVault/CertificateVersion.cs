@@ -13,6 +13,6 @@ public class CertificateVersion
     public CertificateOperationProperties? Properties { get; set; }
     public byte[]? Certificate { get; set; }
     public byte[]? CertSigningRequest { get; set; }
-    public bool HasCompleted => Certificate != null;
+    public bool HasCompleted { get; set; }
     public bool Enabled { get; set; } = true;
 }

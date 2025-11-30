@@ -38,10 +38,10 @@ namespace KeyVaultCA.Tests
         public async Task CreateCACertificate()
         {
             var certificateClient = new CertificateClient(new Uri(keyVaultUrl), credential);
-            var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient, uri => new CryptographyClient(uri, credential), _loggerFactory.CreateLogger<KeyVaultServiceOrchestrator>());
+            var kvServiceClient = new KeyVaultServiceOrchestrator(_ => certificateClient, uri => new CryptographyClient(uri, credential), _loggerFactory.CreateLogger<KeyVaultServiceOrchestrator>());
             var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, _loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
 
-            await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow, DateTime.UtcNow.AddDays(30), 1, default);
+            await kvCertProvider.CreateRootCertificate(new KeyVaultSecretReference(certificateClient.VaultUri,"UnitTestCA"), "CN=UnitTestCA", DateTime.UtcNow, DateTime.UtcNow.AddDays(30), 1, default);
         }
 
         [Fact(Skip = "Integration test")]
@@ -54,7 +54,7 @@ namespace KeyVaultCA.Tests
             var issuerCertificateIdentifier = new KeyVaultCertificateIdentifier(new Uri($"{keyVaultUrl}certificates/{issuerCertificateName}"));
 
             var certificateClient = new CertificateClient(new Uri(keyVaultUrl), credential);
-            var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient, uri => new CryptographyClient(uri, credential), NullLoggerFactory.Instance.CreateLogger<KeyVaultServiceOrchestrator>());
+            var kvServiceClient = new KeyVaultServiceOrchestrator(_ => certificateClient, uri => new CryptographyClient(uri, credential), NullLoggerFactory.Instance.CreateLogger<KeyVaultServiceOrchestrator>());
 
             var cert = await kvServiceClient.SignRequestAsync(
                 pendingCertificateIdentifier.SourceId,

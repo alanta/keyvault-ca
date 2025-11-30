@@ -20,11 +20,11 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var certificateClient = store.GetFakeCertificateClient();
         
         var cryptographyClient = A.Fake<CryptographyClient>();
-        var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
+        var kvServiceClient = new KeyVaultServiceOrchestrator(_ => certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
         // Act
-        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow, DateTime.UtcNow.AddDays(30),1, default);
+        await kvCertProvider.CreateRootCertificate(new KeyVaultSecretReference(store.VaultUri, "UnitTestCA"), "CN=UnitTestCA", DateTime.UtcNow, DateTime.UtcNow.AddDays(30),1, default);
 
         // Assert
         var certificate = store.GetCertificateByName("UnitTestCA");
@@ -44,17 +44,23 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var certificateClient = certificateOperations.GetFakeCertificateClient();
         
         var cryptographyClient = A.Fake<CryptographyClient>();
-        var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
+        var kvServiceClient = new KeyVaultServiceOrchestrator(_ => certificateClient,  uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
-        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTime.UtcNow.AddDays(-1),  DateTime.UtcNow.AddDays(30), 1, default);
+        await kvCertProvider.CreateRootCertificate(
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestCA"), 
+            "CN=UnitTestCA",
+            DateTime.UtcNow.AddDays(-1),
+            DateTime.UtcNow.AddDays(30),
+            1,
+            default);
 
         // Act
         output.WriteLine("------ ACT -------");
         
-        await kvCertProvider.IssueIntermediateCertificateAsync(
-            "UnitTestCA", 
-            "UnitTestIntermediate",
+        await kvCertProvider.IssueIntermediateCertificate(
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestCA"),
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestIntermediate"),
             "CN=intermediate.local", 
             DateTime.UtcNow.Date, 
             DateTime.UtcNow.Date.AddDays(30),
@@ -85,11 +91,18 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var certificateClient = certificateOperations.GetFakeCertificateClient();
 
         var cryptographyClient = A.Fake<CryptographyClient>();
-        var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient, uri => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
+        var kvServiceClient = new KeyVaultServiceOrchestrator(_ => certificateClient, _ => cryptographyClient, new XUnitLogger<KeyVaultServiceOrchestrator>(output));
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, new XUnitLogger<KeyVaultCertificateProvider>(output));
 
         // Setup CA cert
-        await kvCertProvider.CreateCACertificateAsync("UnitTestCA", "CN=UnitTestCA", DateTimeOffset.UtcNow.AddDays(-1),  DateTimeOffset.UtcNow.AddDays(30), 1, default);
+        await kvCertProvider.CreateRootCertificate(
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestCA"),
+            "CN=UnitTestCA", 
+            DateTimeOffset.UtcNow.AddDays(-1),  
+            DateTimeOffset.UtcNow.AddDays(30), 
+            1, 
+            default);
+        
         // setup intermediate cert
         await certificateClient.StartCreateCertificateAsync("UnitTestIntermediate", new CertificatePolicy("Unknown", "CN=intermediate.local"));
         var signedCert = await kvServiceClient.SignRequestAsync(

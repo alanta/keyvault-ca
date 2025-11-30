@@ -17,7 +17,7 @@ namespace KeyVaultCa.Core
     /// </summary>
     public class KeyVaultServiceOrchestrator
     {
-        private readonly CertificateClient _certificateClient;
+        private readonly Func<Uri, CertificateClient> _certificateClientFactory;
         private readonly Func<Uri, CryptographyClient> _cryptoClientFactory;
         private readonly ILogger _logger;
 
@@ -25,17 +25,17 @@ namespace KeyVaultCa.Core
         /// Create the certificate client for managing certificates in Key Vault, using developer authentication locally or managed identity in the cloud.
         /// </summary>
         public KeyVaultServiceOrchestrator(
-            CertificateClient certificateClient,
+            Func<Uri, CertificateClient> certificateClientFactory,
             Func<Uri, CryptographyClient> cryptoClientFactory, 
             ILogger<KeyVaultServiceOrchestrator> logger)
         {
-            _certificateClient = certificateClient;
+            _certificateClientFactory = certificateClientFactory;
             _cryptoClientFactory = cryptoClientFactory;
             _logger = logger;
         }
 
         public async Task<X509Certificate2> CreateRootCertificateAsync(
-            string id,
+            KeyVaultSecretReference certificateReference,
             string subject,
             DateTimeOffset notBefore,
             DateTimeOffset notAfter,
@@ -44,11 +44,12 @@ namespace KeyVaultCa.Core
             int? certPathLength,
             CancellationToken ct = default)
         {
+            var certificateClient = _certificateClientFactory(certificateReference.KeyVaultUrl);
             try
             {
                 // delete pending operations
-                _logger.LogDebug("Deleting pending operations for certificate id {id}.", id);
-                var op = await _certificateClient.GetCertificateOperationAsync(id, ct);
+                _logger.LogDebug("Deleting pending operations for certificate id {id}.", certificateReference.SecretName);
+                var op = await certificateClient.GetCertificateOperationAsync(certificateReference.SecretName, ct);
                 await op.DeleteAsync(ct);
             }
             catch
@@ -56,6 +57,7 @@ namespace KeyVaultCa.Core
                 // intentionally ignore errors 
             }
 
+            var id = certificateReference.SecretName;
             string? caTempCertIdentifier = null;
 
             try
@@ -64,7 +66,7 @@ namespace KeyVaultCa.Core
                 var policySelfSignedNewKey =
                     CreateCertificatePolicy(subject, keySize, true, CertificateKeyType.Rsa, reuseKey: false);
 
-                var newCertificateOperation = await _certificateClient
+                var newCertificateOperation = await certificateClient
                     .StartCreateCertificateAsync(id, policySelfSignedNewKey, true, null, ct).ConfigureAwait(false);
                 await newCertificateOperation.WaitForCompletionAsync(ct).ConfigureAwait(false);
 
@@ -77,7 +79,7 @@ namespace KeyVaultCa.Core
                 _logger.LogDebug("Creation of temporary self signed certificate with id {id} completed.", id);
 
                 var createdCertificateBundle =
-                    await _certificateClient.GetCertificateAsync(id, ct).ConfigureAwait(false);
+                    await certificateClient.GetCertificateAsync(id, ct).ConfigureAwait(false);
                 caTempCertIdentifier = createdCertificateBundle.Value.Id.Segments.Last();
 
                 _logger.LogDebug("Temporary certificate identifier is {certIdentifier}.", caTempCertIdentifier);
@@ -91,7 +93,7 @@ namespace KeyVaultCa.Core
 
                 // create the CSR
                 _logger.LogDebug("Starting to create the CSR.");
-                var createResult = await _certificateClient
+                var createResult = await certificateClient
                     .StartCreateCertificateAsync(id, policyUnknownReuse, true, tags, ct).ConfigureAwait(false);
 
                 if (createResult.Properties.Csr == null)
@@ -128,7 +130,7 @@ namespace KeyVaultCa.Core
                 _logger.LogDebug("Merge Root CA certificate with the signed certificate.");
                 MergeCertificateOptions options =
                     new MergeCertificateOptions(id, [signedcert.Export(X509ContentType.Pkcs12)]);
-                var mergeResult = await _certificateClient.MergeCertificateAsync(options, ct);
+                var mergeResult = await certificateClient.MergeCertificateAsync(options, ct);
 
                 return signedcert;
             }
@@ -147,11 +149,11 @@ namespace KeyVaultCa.Core
                         _logger.LogDebug("Disable the temporary certificate for self signing operation.");
 
                         Response<KeyVaultCertificate> certificateResponse =
-                            await _certificateClient.GetCertificateVersionAsync(id, caTempCertIdentifier, ct);
+                            await certificateClient.GetCertificateVersionAsync(id, caTempCertIdentifier, ct);
                         KeyVaultCertificate certificate = certificateResponse.Value;
                         CertificateProperties certificateProperties = certificate.Properties;
                         certificateProperties.Enabled = false;
-                        await _certificateClient.UpdateCertificatePropertiesAsync(certificateProperties, ct);
+                        await certificateClient.UpdateCertificatePropertiesAsync(certificateProperties, ct);
                     }
                     catch(Exception ex)
                     {
@@ -163,36 +165,18 @@ namespace KeyVaultCa.Core
         }
 
         /// <summary>
-        /// Get Certificate with Policy from Key Vault.
-        /// </summary>
-        public async Task<Response<KeyVaultCertificateWithPolicy>> GetCertificateAsync(string certName,
-            CancellationToken ct = default)
-        {
-            return await _certificateClient.GetCertificateAsync(certName, ct).ConfigureAwait(false);
-        }
-
-        /// <summary>
-        /// Get the certificate signing request from the Key Vault.
-        /// </summary>
-        /// <param name="certName">The name of the certificate.</param>
-        /// <param name="ct">A cancellation token.</param>
-        /// <returns>A certificate operation.</returns>
-        public async Task<CertificateOperation> GetCertificateSigningRequestAsync(string certName,
-            CancellationToken ct = default)
-        {
-            return await _certificateClient.GetCertificateOperationAsync(certName, ct).ConfigureAwait(false);
-        }
-
-        /// <summary>
         /// Get certificate versions for given certificate name.
         /// </summary>
-        public async Task<int> GetCertificateVersionsAsync(string certName, CancellationToken ct)
+        public async Task<int> GetCertificateVersionsAsync(KeyVaultSecretReference secret, CancellationToken ct)
         {
+            var certificateClient = _certificateClientFactory(secret.KeyVaultUrl);
+            
             var versions = 0;
-            await foreach (CertificateProperties cert in _certificateClient.GetPropertiesOfCertificateVersionsAsync(
-                               certName, ct).ConfigureAwait(false))
+            await foreach (CertificateProperties cert in certificateClient.GetPropertiesOfCertificateVersionsAsync(
+                               secret.SecretName, ct).ConfigureAwait(false))
             {
                 versions++;
+                break;
             }
 
             return versions;
@@ -300,8 +284,8 @@ namespace KeyVaultCa.Core
         }
 
         public async Task IssueIntermediateCertificateAsync(
-            string issuerCertificateName, 
-            string certificateName, 
+            KeyVaultSecretReference issuerCertificate, 
+            KeyVaultSecretReference certificate, 
             string subject, 
             DateTimeOffset notBefore,
             DateTimeOffset notAfter,
@@ -309,20 +293,21 @@ namespace KeyVaultCa.Core
             int? pathLength,
             CancellationToken ct)
         {
-            var startOperation = await CheckForPendingOperations(certificateName, ct);
+            var certificateClient = _certificateClientFactory(certificate.KeyVaultUrl);
+            var startOperation = await CheckForPendingOperations(certificateClient, certificate.SecretName, ct);
 
             if (startOperation)
             {
-                await _certificateClient.StartCreateCertificateAsync(certificateName,
+                await certificateClient.StartCreateCertificateAsync(certificate.SecretName,
                     new CertificatePolicy("Unknown", subject, sans), cancellationToken: ct);
             }
 
             var signedCert2 = await SignRequestAsync(
-                new Uri($"{_certificateClient.VaultUri}certificates/{certificateName}"),
-                new Uri($"{_certificateClient.VaultUri}certificates/{issuerCertificateName}"),
+                certificate.CertificateUri,
+                issuerCertificate.CertificateUri,
                 notBefore,
                 notAfter,
-                uri => _certificateClient, // WARNING : Assuming the same keyvault for now
+                _certificateClientFactory,
                 _cryptoClientFactory,
                 extensions: [
                     new X509BasicConstraintsExtension(true, pathLength.HasValue, pathLength ?? 0, true),
@@ -330,32 +315,34 @@ namespace KeyVaultCa.Core
                     new X509EnhancedKeyUsageExtension(new OidCollection(){ new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) }, false)
                 ],
                 ct);
-            await _certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificateName, new []{signedCert2.RawData}), default);
+            await certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificate.SecretName,
+                [signedCert2.RawData]), ct);
         }
 
         public async Task IssueCertificateAsync(
-            string issuerCertificateName, 
-            string certificateName, 
+            KeyVaultSecretReference issuerCertificate, 
+            KeyVaultSecretReference certificate,
             string subject, 
             DateTimeOffset notBefore,
             DateTimeOffset notAfter,
             SubjectAlternativeNames sans,
             CancellationToken ct)
         {
-            var startOperation = await CheckForPendingOperations(certificateName, ct);
+            var certificateClient = _certificateClientFactory(certificate.KeyVaultUrl);
+            var startOperation = await CheckForPendingOperations(certificateClient, certificate.SecretName, ct);
 
             if (startOperation)
             {
-                await _certificateClient.StartCreateCertificateAsync(certificateName,
+                await certificateClient.StartCreateCertificateAsync(certificate.SecretName,
                     new CertificatePolicy("Unknown", subject, sans), cancellationToken: ct);
             }
 
             var signedCert2 = await SignRequestAsync(
-                new Uri($"{_certificateClient.VaultUri}certificates/{certificateName}"),
-                new Uri($"{_certificateClient.VaultUri}certificates/{issuerCertificateName}"),
+                certificate.CertificateUri,
+                issuerCertificate.CertificateUri,
                 notBefore,
                 notAfter,
-                uri => _certificateClient, // WARNING : Assuming the same keyvault for now
+                _certificateClientFactory,
                 _cryptoClientFactory,
                 extensions: [
                     new X509BasicConstraintsExtension(false, false, 0, true),
@@ -363,22 +350,24 @@ namespace KeyVaultCa.Core
                     new X509EnhancedKeyUsageExtension(new OidCollection(){ new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) }, false)
                 ],
                 ct);
-            await _certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificateName, new []{signedCert2.RawData}), default);
+            await certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificate.SecretName,
+                [signedCert2.RawData]), ct);
         }
 
         /// <summary>
         /// See if there are any pending operations for the given certificate name.
         /// Cancels the operation if it is not completed and the issuer is not "Unknown".
         /// </summary>
+        /// <param name="client">A KeyVault CertificateClient for the Key Vault containing the certificate.</param>
         /// <param name="certificateName">The name of the certificate.</param>
         /// <param name="ct">A cancellation token</param>
         /// <returns>True if a new operation should be started.</returns>
-        private async Task<bool> CheckForPendingOperations(string certificateName, CancellationToken ct)
+        private async Task<bool> CheckForPendingOperations(CertificateClient client, string certificateName, CancellationToken ct)
         {
             var startOperation = true;
             try
             {
-                var op = await _certificateClient.GetCertificateOperationAsync(certificateName, ct);
+                var op = await client.GetCertificateOperationAsync(certificateName, ct);
                 if (!(op.HasCompleted || string.Equals(op.Properties.Status, "completed", StringComparison.InvariantCulture)))
                 {
                     _logger.LogWarning("Operation {operationId} is pending for certificate {certificateName}.",  op.Id, certificateName);

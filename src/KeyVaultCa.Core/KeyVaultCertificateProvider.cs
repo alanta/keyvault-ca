@@ -19,26 +19,26 @@ namespace KeyVaultCa.Core
     {
         private readonly ILogger _logger = logger;
 
-        public async Task CreateCACertificateAsync(
-            string certificateName, 
+        public async Task CreateRootCertificate(
+            KeyVaultSecretReference certificate, 
             string subject, 
             DateTimeOffset notBefore, 
             DateTimeOffset notAfter, 
             int? certPathLength, 
             CancellationToken ct)
         {
-            var certVersions = await keyVaultServiceOrchestrator.GetCertificateVersionsAsync(certificateName, ct).ConfigureAwait(false);
+            var certVersions = await keyVaultServiceOrchestrator.GetCertificateVersionsAsync(certificate, ct).ConfigureAwait(false);
 
             if (certVersions != 0)
             {
-                _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", certificateName);
+                _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", certificate.SecretName);
             }
             else
             {
                 _logger.LogInformation("No existing certificate found, starting to create a new one.");
                 
                 await keyVaultServiceOrchestrator.CreateRootCertificateAsync(
-                        certificateName,
+                        certificate,
                         subject,
                         notBefore,
                         notAfter,
@@ -46,13 +46,13 @@ namespace KeyVaultCa.Core
                         HashAlgorithmName.SHA256,
                         certPathLength,
                         ct);
-                _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created successfully.", certificateName, certPathLength);
+                _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created successfully.", certificate.SecretName, certPathLength);
             }
         }
         
-        public async Task IssueIntermediateCertificateAsync(
-            string issuerCertificateName, 
-            string certificateName, 
+        public async Task IssueIntermediateCertificate(
+            KeyVaultSecretReference issuerCertificate, 
+            KeyVaultSecretReference certificate, 
             string subject, 
             DateTimeOffset notBefore, 
             DateTimeOffset notAfter, 
@@ -62,10 +62,10 @@ namespace KeyVaultCa.Core
         {
             try
             {
-                var certVersions = await keyVaultServiceOrchestrator.GetCertificateVersionsAsync(certificateName, ct).ConfigureAwait(false);
+                var certVersions = await keyVaultServiceOrchestrator.GetCertificateVersionsAsync(certificate, ct).ConfigureAwait(false);
                 if (certVersions != 0)
                 {
-                    _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", certificateName);
+                    _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", certificate.SecretName);
                 }
                 else
                 {
@@ -79,21 +79,21 @@ namespace KeyVaultCa.Core
             }
 
             await keyVaultServiceOrchestrator.IssueIntermediateCertificateAsync(
-                issuerCertificateName,
-                certificateName,
+                issuerCertificate,
+                certificate,
                 subject,
                 notBefore,
                 notAfter,
                 sans,
                 certPathLength,
                 ct);
-            _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created successfully.", certificateName, certPathLength);
+            _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created successfully.", certificate.SecretName, certPathLength);
             
         }
         
         public async Task IssueCertificate(
-            string issuerCertificateName, 
-            string certificateName, 
+            KeyVaultSecretReference issuerCertificate, 
+            KeyVaultSecretReference certificate, 
             string subject, 
             DateTimeOffset notBefore, 
             DateTimeOffset notAfter, 
@@ -102,10 +102,10 @@ namespace KeyVaultCa.Core
         {
             try
             {
-                var certVersions = await keyVaultServiceOrchestrator.GetCertificateVersionsAsync(certificateName, ct).ConfigureAwait(false);
+                var certVersions = await keyVaultServiceOrchestrator.GetCertificateVersionsAsync(certificate, ct).ConfigureAwait(false);
                 if (certVersions != 0)
                 {
-                    _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", certificateName);
+                    _logger.LogWarning("A certificate with the specified issuer name {name} already exists.", certificate.SecretName);
                 }
                 else
                 {
@@ -120,8 +120,8 @@ namespace KeyVaultCa.Core
             }
 
             await keyVaultServiceOrchestrator.IssueCertificateAsync(
-                issuerCertificateName,
-                certificateName,
+                issuerCertificate,
+                certificate,
                 subject,
                 notBefore,
                 notAfter,

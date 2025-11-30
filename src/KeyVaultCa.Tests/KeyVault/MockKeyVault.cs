@@ -28,11 +28,11 @@ public static class MockKeyVault
         return certificateClient;
     }
 
-    private static CertificateClient WithVaultUri(this CertificateClient certificateClient, string vaultUri)
+    private static CertificateClient WithVaultUri(this CertificateClient certificateClient, Uri vaultUri)
     {
         // Set the vault URI
         A.CallTo(() => certificateClient.VaultUri)
-            .Returns(new Uri(vaultUri));
+            .Returns(vaultUri);
 
         return certificateClient;
     }

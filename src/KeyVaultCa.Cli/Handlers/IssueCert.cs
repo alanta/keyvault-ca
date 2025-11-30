@@ -1,6 +1,4 @@
-using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
-using Azure.Security.KeyVault.Keys.Cryptography;
 using KeyVaultCa.Core;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,29 +8,14 @@ namespace KeyVaultCa.Cli.Handlers;
 
 public class IssueCert(ILoggerFactory loggerFactory)
 {
-    public async Task Execute(string keyVault, string issuer, string name, DateTimeOffset notBefore, DateTimeOffset notAfter, SubjectAlternativeNames san, CancellationToken cancellationToken)
+    public async Task Execute(KeyVaultSecretReference issuer, KeyVaultSecretReference cert, DateTimeOffset notBefore, DateTimeOffset notAfter, SubjectAlternativeNames san, CancellationToken cancellationToken)
     {
-        var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
-        {
-            ExcludeWorkloadIdentityCredential = true,
-            ExcludeManagedIdentityCredential = true,
-            ExcludeAzureDeveloperCliCredential = true,
-            ExcludeVisualStudioCodeCredential = true, 
-            ExcludeVisualStudioCredential = true,
-            ExcludeAzurePowerShellCredential = true,
-            ExcludeInteractiveBrowserCredential = true
-        });
-        var certificateClient = new CertificateClient(GetKeyVaultUri(keyVault), credential);
-        var kvServiceClient = new KeyVaultServiceOrchestrator(certificateClient, uri => new CryptographyClient(uri, credential), loggerFactory.CreateLogger<KeyVaultServiceOrchestrator>());
+        var clientFactory = new CachedClientFactory();
+        
+        var kvServiceClient = new KeyVaultServiceOrchestrator(clientFactory.GetCertificateClientFactory, clientFactory.GetCryptographyClient, loggerFactory.CreateLogger<KeyVaultServiceOrchestrator>());
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
 
-        await kvCertProvider.IssueCertificate(issuer, name, $"CN={name}", notBefore, notAfter, san, cancellationToken);
-    }
-    
-    private static Uri GetKeyVaultUri(string keyVault)
-    {
-        var fullUrl = keyVault.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? keyVault : $"https://{keyVault}.vault.azure.net/";
-        return new Uri(fullUrl);
+        await kvCertProvider.IssueCertificate(issuer, cert, $"CN={cert.SecretName}", notBefore, notAfter, san, cancellationToken);
     }
 
     public static void Configure(CommandLineApplication cmd)
@@ -54,6 +37,9 @@ public class IssueCert(ILoggerFactory loggerFactory)
         
         cmd.OnExecuteAsync(async cancellationToken =>
         {
+            var issuer = KeyVaultSecretReference.FromNames(kvOption.Value()!, issuerArgument.Value!);
+            var cert = KeyVaultSecretReference.FromNames(kvOption.Value()!, nameArgument.Value!);
+            
             var san = CommonOptions.ParseSubjectAlternativeNames(dnsOption, emailOption, upnOption);
             
             var (notBefore, notAfter) = CommonOptions.DetermineValidityPeriod(
@@ -63,7 +49,7 @@ public class IssueCert(ILoggerFactory loggerFactory)
                 TimeSpan.FromDays(365));
             
             var handler = new IssueCert(CliApp.ServiceProvider.GetRequiredService<ILoggerFactory>());
-            await handler.Execute(kvOption.Value()!, issuerArgument.Value!, nameArgument.Value!, notBefore, notAfter, san, cancellationToken);
+            await handler.Execute(issuer, cert, notBefore, notAfter, san, cancellationToken);
         });
     }
 }

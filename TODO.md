@@ -24,11 +24,11 @@ The core library has most of the required functionality:
 * Test harnass to verify KV interactions
 
 ## Work breakdown
-* Clear out unused code, restructure to make it more intuitive
-* Use different KeyVault for CA and leaf certs
+* [ ] Clear out unused code, restructure to make it more intuitive
+* [ ] Use different KeyVault for CA and leaf certs
 * Add CLI project
   * [x] Create CA cert
-  * [ ] Issue Intermediate cert
+  * [x] Issue Intermediate cert
   * [x] Issue leaf cert
   * [x] Renew leaf cert
   * [x] Download cert (optionally with key, as that is needed for some scenarios)

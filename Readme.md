@@ -44,6 +44,10 @@ keyvaultca create-ca-cert --common-name "KeyVault-ca" --duration 2y my-ca-keyvau
 keyvaultca issue-cert --issuer my-ca-keyvault/root-ca --duration 90d --start 20250401 --san device1 --dns device1.alanta.local my-certs-keyvault/device1
 ```
 
+- Renew a certificate
+
+Start a new version through the Azure portal. Then issue the certificate again.
+
 - Create an intermediate certificate
 - Create a leaf certificate
 - Download the certificates
