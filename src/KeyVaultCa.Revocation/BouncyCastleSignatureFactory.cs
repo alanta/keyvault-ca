@@ -5,6 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using KeyVaultCa.Core;
 using Org.BouncyCastle.Asn1;
+using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Security;
 
@@ -34,7 +35,7 @@ public class BouncyCastleSignatureFactory : ISignatureFactory
         _algorithmOid = DetermineAlgorithmOid(signerCertificate, hashAlgorithm);
     }
 
-    public object AlgorithmDetails => DerObjectIdentifier.GetInstance(Asn1Object.FromByteArray(
+    public object AlgorithmDetails => AlgorithmIdentifier.GetInstance(Asn1Object.FromByteArray(
         _signatureGenerator.GetSignatureAlgorithmIdentifier(_hashAlgorithm)));
 
     public IStreamCalculator CreateCalculator()
