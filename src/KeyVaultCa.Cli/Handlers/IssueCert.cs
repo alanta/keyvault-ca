@@ -15,7 +15,7 @@ public class IssueCert(ILoggerFactory loggerFactory)
         var kvServiceClient = new KeyVaultServiceOrchestrator(clientFactory.GetCertificateClientFactory, clientFactory.GetCryptographyClient, loggerFactory.CreateLogger<KeyVaultServiceOrchestrator>());
         var kvCertProvider = new KeyVaultCertificateProvider(kvServiceClient, loggerFactory.CreateLogger<KeyVaultCertificateProvider>());
 
-        await kvCertProvider.IssueCertificate(issuer, cert, $"CN={cert.SecretName}", notBefore, notAfter, san, cancellationToken);
+        await kvCertProvider.IssueCertificate(issuer, cert, $"CN={cert.SecretName}", notBefore, notAfter, san, revocationConfig: null, cancellationToken);
     }
 
     public static void Configure(CommandLineApplication cmd)

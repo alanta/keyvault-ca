@@ -10,6 +10,27 @@ using System.Threading.Tasks;
 
 namespace KeyVaultCa.Core
 {
+    /// <summary>
+    /// Configuration for certificate revocation endpoints
+    /// </summary>
+    public class RevocationConfig
+    {
+        /// <summary>
+        /// OCSP responder URL for Authority Information Access extension
+        /// </summary>
+        public string? OcspUrl { get; set; }
+
+        /// <summary>
+        /// CRL distribution point URL for CRL Distribution Points extension
+        /// </summary>
+        public string? CrlUrl { get; set; }
+
+        /// <summary>
+        /// CA Issuers URL for Authority Information Access extension
+        /// </summary>
+        public string? CaIssuersUrl { get; set; }
+    }
+
     public static class CertificateFactory
     {
         public const string AuthorityKeyIdentifierOid = "2.5.29.35";
@@ -31,11 +52,12 @@ namespace KeyVaultCa.Core
         /// <exception cref="ArgumentException"></exception>
         /// <exception cref="NotSupportedException"></exception>
         public static Task<X509Certificate2> SignRequest(byte[] csr, X509Certificate2 issuerCert,
-            X509SignatureGenerator generator, 
+            X509SignatureGenerator generator,
             DateTimeOffset notBefore,
             DateTimeOffset notAfter,
             HashAlgorithmName? hashAlgorithm = null,
             IReadOnlyList<X509Extension>? extensions = null,
+            RevocationConfig? revocationConfig = null,
             CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(csr);
@@ -106,6 +128,26 @@ namespace KeyVaultCa.Core
             if(authorityKeyIdentifier == null)
             {
                 request.CertificateExtensions.Add(BuildAuthorityKeyIdentifier(issuerCert));
+            }
+
+            // Add revocation information extensions if configured
+            if (revocationConfig != null)
+            {
+                // Add Authority Information Access (AIA) extension if OCSP or CA Issuers URL is provided
+                if (revocationConfig.OcspUrl != null || revocationConfig.CaIssuersUrl != null)
+                {
+                    var aiaExt = BuildAuthorityInformationAccessExtension(
+                        revocationConfig.OcspUrl,
+                        revocationConfig.CaIssuersUrl);
+                    request.CertificateExtensions.Add(aiaExt);
+                }
+
+                // Add CRL Distribution Points (CDP) extension if CRL URL is provided
+                if (revocationConfig.CrlUrl != null)
+                {
+                    var cdpExt = BuildCrlDistributionPointsExtension(revocationConfig.CrlUrl);
+                    request.CertificateExtensions.Add(cdpExt);
+                }
             }
 
             var serialNumber = GenerateSerialNumber();
@@ -326,6 +368,93 @@ namespace KeyVaultCa.Core
                 writer.PopSequence();
                 return new X509Extension(AuthorityKeyIdentifierOid, writer.Encode(), false);
             }
+        }
+
+        /// <summary>
+        /// Build the Authority Information Access (AIA) extension per RFC 5280 section 4.2.2.1
+        /// </summary>
+        /// <param name="ocspUrl">Optional OCSP responder URL</param>
+        /// <param name="caIssuersUrl">Optional CA Issuers URL</param>
+        /// <returns>X509Extension for AIA</returns>
+        private static X509Extension BuildAuthorityInformationAccessExtension(string? ocspUrl, string? caIssuersUrl)
+        {
+            AsnWriter writer = new AsnWriter(AsnEncodingRules.DER);
+
+            // AuthorityInfoAccessSyntax ::= SEQUENCE SIZE (1..MAX) of AccessDescription
+            writer.PushSequence();
+
+            // Add OCSP access method if provided
+            if (ocspUrl != null)
+            {
+                // AccessDescription ::= SEQUENCE {
+                //   accessMethod OBJECT IDENTIFIER,
+                //   accessLocation GeneralName }
+                writer.PushSequence();
+                writer.WriteObjectIdentifier(WellKnownOids.AccessMethods.Ocsp);
+
+                // GeneralName ::= uniformResourceIdentifier [6] IA5String
+                Asn1Tag uriTag = new Asn1Tag(TagClass.ContextSpecific, 6);
+                writer.WriteCharacterString(UniversalTagNumber.IA5String, ocspUrl, uriTag);
+
+                writer.PopSequence();
+            }
+
+            // Add CA Issuers access method if provided
+            if (caIssuersUrl != null)
+            {
+                writer.PushSequence();
+                writer.WriteObjectIdentifier(WellKnownOids.AccessMethods.CaIssuers);
+
+                Asn1Tag uriTag = new Asn1Tag(TagClass.ContextSpecific, 6);
+                writer.WriteCharacterString(UniversalTagNumber.IA5String, caIssuersUrl, uriTag);
+
+                writer.PopSequence();
+            }
+
+            writer.PopSequence();
+
+            return new X509Extension(WellKnownOids.Extensions.AuthorityInformationAccess, writer.Encode(), false);
+        }
+
+        /// <summary>
+        /// Build the CRL Distribution Points (CDP) extension per RFC 5280 section 4.2.1.13
+        /// </summary>
+        /// <param name="crlUrl">CRL distribution point URL</param>
+        /// <returns>X509Extension for CDP</returns>
+        private static X509Extension BuildCrlDistributionPointsExtension(string crlUrl)
+        {
+            AsnWriter writer = new AsnWriter(AsnEncodingRules.DER);
+
+            // CRLDistributionPoints ::= SEQUENCE SIZE (1..MAX) OF DistributionPoint
+            writer.PushSequence();
+
+            // DistributionPoint ::= SEQUENCE {
+            //   distributionPoint [0] DistributionPointName OPTIONAL,
+            //   reasons [1] ReasonFlags OPTIONAL,
+            //   cRLIssuer [2] GeneralNames OPTIONAL }
+            writer.PushSequence();
+
+            // distributionPoint [0] DistributionPointName
+            Asn1Tag distPointTag = new Asn1Tag(TagClass.ContextSpecific, 0, true);
+            writer.PushSequence(distPointTag);
+
+            // DistributionPointName ::= CHOICE {
+            //   fullName [0] GeneralNames,
+            //   nameRelativeToCRLIssuer [1] RelativeDistinguishedName }
+            Asn1Tag fullNameTag = new Asn1Tag(TagClass.ContextSpecific, 0, true);
+            writer.PushSequence(fullNameTag);
+
+            // GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName
+            // GeneralName ::= uniformResourceIdentifier [6] IA5String
+            Asn1Tag uriTag = new Asn1Tag(TagClass.ContextSpecific, 6);
+            writer.WriteCharacterString(UniversalTagNumber.IA5String, crlUrl, uriTag);
+
+            writer.PopSequence(fullNameTag);
+            writer.PopSequence(distPointTag);
+            writer.PopSequence();
+            writer.PopSequence();
+
+            return new X509Extension(WellKnownOids.Extensions.CrlDistributionPoints, writer.Encode(), false);
         }
     }
 }

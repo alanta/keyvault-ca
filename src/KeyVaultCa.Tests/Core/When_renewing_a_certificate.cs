@@ -37,14 +37,15 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
 
         await kvCertProvider.IssueCertificate(
             new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestCA"),
-            new KeyVaultSecretReference(certificateOperations.VaultUri, "RenewMe"), 
-            "CN=test.local", 
-            today, 
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "RenewMe"),
+            "CN=test.local",
+            today,
             today.AddDays(30),
             new SubjectAlternativeNames()
             {
                 DnsNames = { "test.local" }
-            }, 
+            },
+            revocationConfig: null,
             ct);
         ;
         // Act
@@ -55,7 +56,7 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
         // Load the existing certificate from keyvault
         await kvServiceClient.IssueCertificateAsync(
             new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestCA"),
-            new KeyVaultSecretReference(certificateOperations.VaultUri, "RenewMe"), 
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "RenewMe"),
             "CN=test.local",
             today.AddDays(30),
             today.AddDays(60),
@@ -63,6 +64,7 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
             {
                 DnsNames = { "test.local" }
             },
+            revocationConfig: null,
             ct);
 
         /*await kvCertProvider.RenewCertificateAsync(
@@ -122,6 +124,7 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
             {
                 DnsNames = { "test.local" }
             },
+            revocationConfig: null,
             ct);
 
         // Assert
@@ -174,6 +177,7 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
             {
                 DnsNames = { "test.local" }
             },
+            revocationConfig: null,
             ct);
 
         // Assert

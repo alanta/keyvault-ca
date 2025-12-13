@@ -229,6 +229,7 @@ namespace KeyVaultCa.Core
             Func<Uri, CertificateClient> keyVaultClientFactory,
             Func<Uri, CryptographyClient> cryptoClientFactory,
             IReadOnlyList<X509Extension>? extensions = null,
+            RevocationConfig? revocationConfig = null,
             CancellationToken ct = default)
         {
             if (!KeyVaultCertificateIdentifier.TryCreate(certificateUri, out var csrCertificateIdentifier))
@@ -279,19 +280,21 @@ namespace KeyVaultCa.Core
                 notBefore,
                 notAfter,
                 HashAlgorithmName.SHA256,
-                extensions, 
+                extensions,
+                revocationConfig,
                 ct);
         }
 
         public async Task IssueIntermediateCertificateAsync(
-            KeyVaultSecretReference issuerCertificate, 
-            KeyVaultSecretReference certificate, 
-            string subject, 
+            KeyVaultSecretReference issuerCertificate,
+            KeyVaultSecretReference certificate,
+            string subject,
             DateTimeOffset notBefore,
             DateTimeOffset notAfter,
             SubjectAlternativeNames sans,
             int? pathLength,
-            CancellationToken ct)
+            RevocationConfig? revocationConfig = null,
+            CancellationToken ct = default)
         {
             var certificateClient = _certificateClientFactory(certificate.KeyVaultUrl);
             var startOperation = await CheckForPendingOperations(certificateClient, certificate.SecretName, ct);
@@ -314,19 +317,21 @@ namespace KeyVaultCa.Core
                     new X509KeyUsageExtension(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.DigitalSignature, true),
                     new X509EnhancedKeyUsageExtension(new OidCollection(){ new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) }, false)
                 ],
+                revocationConfig,
                 ct);
             await certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificate.SecretName,
                 [signedCert2.RawData]), ct);
         }
 
         public async Task IssueCertificateAsync(
-            KeyVaultSecretReference issuerCertificate, 
+            KeyVaultSecretReference issuerCertificate,
             KeyVaultSecretReference certificate,
-            string subject, 
+            string subject,
             DateTimeOffset notBefore,
             DateTimeOffset notAfter,
             SubjectAlternativeNames sans,
-            CancellationToken ct)
+            RevocationConfig? revocationConfig = null,
+            CancellationToken ct = default)
         {
             var certificateClient = _certificateClientFactory(certificate.KeyVaultUrl);
             var startOperation = await CheckForPendingOperations(certificateClient, certificate.SecretName, ct);
@@ -349,6 +354,7 @@ namespace KeyVaultCa.Core
                     new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true),
                     new X509EnhancedKeyUsageExtension(new OidCollection(){ new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) }, false)
                 ],
+                revocationConfig,
                 ct);
             await certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificate.SecretName,
                 [signedCert2.RawData]), ct);

@@ -41,6 +41,7 @@ public class When_using_two_keyvaults(ITestOutputHelper output)
             today.AddDays(-1),
             today.AddDays(30),
                 new SubjectAlternativeNames{DnsNames = { "cert1.test.local" }},
+            revocationConfig: null,
             ct);
         
         // Assert
