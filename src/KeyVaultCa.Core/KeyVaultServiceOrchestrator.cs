@@ -331,6 +331,7 @@ namespace KeyVaultCa.Core
             DateTimeOffset notAfter,
             SubjectAlternativeNames sans,
             RevocationConfig? revocationConfig = null,
+            bool ocspSigning = false,
             CancellationToken ct = default)
         {
             var certificateClient = _certificateClientFactory(certificate.KeyVaultUrl);
@@ -342,6 +343,26 @@ namespace KeyVaultCa.Core
                     new CertificatePolicy("Unknown", subject, sans), cancellationToken: ct);
             }
 
+            var extensionsList = new List<X509Extension>
+            {
+                new X509BasicConstraintsExtension(false, false, 0, true),
+                new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true)
+            };
+
+            if (ocspSigning)
+            {
+                // RFC 6960 requires the OCSP Signing EKU extension to be marked as critical
+                extensionsList.Add(new X509EnhancedKeyUsageExtension(
+                    new OidCollection { new Oid(WellKnownOids.ExtendedKeyUsages.OCSPSigning) },
+                    critical: true));
+            }
+            else
+            {
+                extensionsList.Add(new X509EnhancedKeyUsageExtension(
+                    new OidCollection { new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) },
+                    critical: false));
+            }
+
             var signedCert2 = await SignRequestAsync(
                 certificate.CertificateUri,
                 issuerCertificate.CertificateUri,
@@ -349,11 +370,7 @@ namespace KeyVaultCa.Core
                 notAfter,
                 _certificateClientFactory,
                 _cryptoClientFactory,
-                extensions: [
-                    new X509BasicConstraintsExtension(false, false, 0, true),
-                    new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true),
-                    new X509EnhancedKeyUsageExtension(new OidCollection(){ new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) }, false)
-                ],
+                extensions: extensionsList,
                 revocationConfig,
                 ct);
             await certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificate.SecretName,

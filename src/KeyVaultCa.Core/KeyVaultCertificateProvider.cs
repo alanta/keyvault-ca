@@ -101,6 +101,7 @@ namespace KeyVaultCa.Core
             DateTimeOffset notAfter,
             SubjectAlternativeNames sans,
             RevocationConfig? revocationConfig = null,
+            bool ocspSigning = false,
             CancellationToken ct = default)
         {
             try
@@ -112,7 +113,7 @@ namespace KeyVaultCa.Core
                 }
                 else
                 {
-                    
+
                     _logger.LogInformation("No existing certificate found, starting to create a new one.");
                 }
             }
@@ -130,6 +131,7 @@ namespace KeyVaultCa.Core
                 notAfter,
                 sans,
                 revocationConfig,
+                ocspSigning,
                 ct);
         }
     }
