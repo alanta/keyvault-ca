@@ -102,3 +102,9 @@ orleans.codegen.cs
 *_p.c
 *_h.h
 
+# Project-specific
+.env
+*.pfx
+*.crt
+*.pem
+*.key

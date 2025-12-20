@@ -9,6 +9,7 @@ Add RFC 6960 (OCSP) and RFC 5280 (CRL) support to enable certificate revocation 
 - **Azure Table Storage** - Cost-effective storage for revocation data
 - **CLI-first revocation** - `keyvaultca revoke-cert` command, admin API can come later
 - **Dedicated OCSP signing certificate** - Better security isolation than signing with CA key directly
+- **Specific CLI flags over generic options** - Use `--ocsp-signing` flag instead of generic `--eku <OID>` for better UX and simplicity
 
 ## Solution Structure
 
@@ -44,11 +45,22 @@ Add RFC 6960 (OCSP) and RFC 5280 (CRL) support to enable certificate revocation 
    - New handler: `Handlers/RevokeCert.cs`
    - New handler: `Handlers/GenerateCrl.cs`
    - Update `IssueCert.cs` and `IssueIntermediateCert.cs` to accept OCSP/CRL URL options
-   - Add `--eku` option for issuing OCSP signing certificates
+   - Add `--ocsp-signing` flag to `IssueCert.cs` for issuing OCSP signing certificates
 
 ## Implementation Phases
 
-### Phase 1: Core Models & Storage (Foundation)
+**Status Overview:**
+- ✅ Phase 1: Core Models & Storage - COMPLETE
+- ✅ Phase 2: Certificate Extensions (AIA/CDP) - COMPLETE
+- ✅ Phase 3: CLI Revocation Command - COMPLETE
+- ✅ Phase 4: CRL Generation - COMPLETE
+- ✅ Phase 5: OCSP Responder Service - COMPLETE
+- ✅ Unit Tests - COMPLETE (9 tests passing)
+- 🔄 **Phase 6: OCSP Signing Certificate Support - READY TO IMPLEMENT**
+
+---
+
+### Phase 1: Core Models & Storage (Foundation) ✅ COMPLETE
 
 **Files to create:**
 - `src/KeyVaultCa.Revocation/Models/RevocationRecord.cs`
@@ -447,27 +459,48 @@ COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "KeyVaultCa.OcspResponder.dll"]
 ```
 
-### Phase 6: OCSP Signing Certificate Support
+### Phase 6: OCSP Signing Certificate Support 🔄 READY TO IMPLEMENT
+
+**Design Decision:** Use a specific `--ocsp-signing` flag instead of generic `--eku <OID>` for simplicity and better UX.
 
 **Files to modify:**
 - `src/KeyVaultCa.Cli/Handlers/IssueCert.cs`
+- `src/KeyVaultCa.Core/KeyVaultCertificateProvider.cs`
+- `src/KeyVaultCa.Core/KeyVaultServiceOrchestrator.cs`
 
-**Add --eku option:**
+**Implementation Steps:**
+
+1. **Add --ocsp-signing flag to IssueCert.cs** (in `Configure` method):
 ```csharp
-var ekuOption = cmd.Option<string>("--eku <OID>",
-    "Extended Key Usage OID (can specify multiple times, e.g., 1.3.6.1.5.5.7.3.9 for OCSP Signing)",
-    CommandOptionType.MultipleValue);
+var ocspSigningOption = cmd.Option("--ocsp-signing",
+    "Add OCSP Signing Extended Key Usage (EKU) extension (OID 1.3.6.1.5.5.7.3.9)",
+    CommandOptionType.NoValue);
 ```
 
-Pass EKU OIDs as extensions when creating certificate (modify Core to accept custom EKU in SignRequest).
+2. **Update Execute signature** to accept `bool ocspSigning` parameter
+
+3. **Pass flag through execution chain**:
+   - IssueCert.Execute() → KeyVaultCertificateProvider.IssueCertificate() → KeyVaultServiceOrchestrator.IssueCertificateAsync()
+
+4. **Build EKU extension conditionally** in KeyVaultServiceOrchestrator.IssueCertificateAsync():
+```csharp
+if (ocspSigning)
+{
+    extensions.Add(new X509EnhancedKeyUsageExtension(
+        new OidCollection { new Oid(WellKnownOids.ExtendedKeyUsages.OCSPSigning) },
+        critical: true));  // RFC 6960 requires critical=true
+}
+```
 
 **Create OCSP signing cert:**
 ```bash
 keyvaultca issue-cert \
   --issuer root-ca@my-vault \
-  --eku 1.3.6.1.5.5.7.3.9 \
+  --ocsp-signing \
   ocsp-signer@my-vault
 ```
+
+**Note:** The OID `1.3.6.1.5.5.7.3.9` is already defined in `WellKnownOids.ExtendedKeyUsages.OCSPSigning`
 
 ## Deployment
 
@@ -541,7 +574,7 @@ Create internal DNS records:
 - `src/KeyVaultCa.Core/KeyVaultServiceOrchestrator.cs` - Thread RevocationConfig through signing methods
 
 ### CLI
-- `src/KeyVaultCa.Cli/Handlers/IssueCert.cs` - Add --ocsp-url, --crl-url, --eku options
+- `src/KeyVaultCa.Cli/Handlers/IssueCert.cs` - Add --ocsp-url, --crl-url, --ocsp-signing options
 - `src/KeyVaultCa.Cli/Handlers/IssueIntermediateCert.cs` - Add --ocsp-url, --crl-url options
 - `src/KeyVaultCa.Cli/CliApp.cs` - Register new commands
 
