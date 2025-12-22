@@ -81,8 +81,8 @@ public class DownloadCert(ILoggerFactory loggerFactory)
         }
         else
         {
-            Console.WriteLine("Exporting certificate to {0}.pem", name);
-            await File.WriteAllTextAsync($"{name}.pem", cert.ExportCertificatePem(), cancellationToken);
+            Console.WriteLine("Exporting certificate to {0}.crt", name);
+            await File.WriteAllTextAsync($"{name}.crt", cert.ExportCertificatePem(), cancellationToken);
             
             if( key )
             {
