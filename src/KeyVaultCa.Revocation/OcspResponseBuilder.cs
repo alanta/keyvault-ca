@@ -25,19 +25,31 @@ public class OcspResponseBuilder
     private readonly KeyVaultSignatureGenerator _signatureGenerator;
     private readonly X509Certificate2 _ocspSigningCert;
     private readonly X509Certificate2 _issuerCert;
+    private readonly TimeSpan _responseValidity;
     private readonly ILogger<OcspResponseBuilder> _logger;
 
+    /// <summary>
+    /// Creates a new OCSP response builder.
+    /// </summary>
+    /// <param name="revocationStore">Store for looking up revocation status</param>
+    /// <param name="signatureGenerator">Generator for signing responses</param>
+    /// <param name="ocspSigningCert">Certificate used to sign OCSP responses</param>
+    /// <param name="issuerCert">CA certificate that issued the certificates being checked</param>
+    /// <param name="logger">Logger instance</param>
+    /// <param name="responseValidity">How long OCSP responses are valid (default: 24 hours)</param>
     public OcspResponseBuilder(
         IRevocationStore revocationStore,
         KeyVaultSignatureGenerator signatureGenerator,
         X509Certificate2 ocspSigningCert,
         X509Certificate2 issuerCert,
-        ILogger<OcspResponseBuilder> logger)
+        ILogger<OcspResponseBuilder> logger,
+        TimeSpan? responseValidity = null)
     {
         _revocationStore = revocationStore;
         _signatureGenerator = signatureGenerator;
         _ocspSigningCert = ocspSigningCert;
         _issuerCert = issuerCert;
+        _responseValidity = responseValidity ?? TimeSpan.FromHours(24);
         _logger = logger;
     }
 
@@ -94,7 +106,7 @@ public class OcspResponseBuilder
 
             // Build single response
             var thisUpdate = new DerGeneralizedTime(DateTime.UtcNow);
-            var nextUpdate = new DerGeneralizedTime(DateTime.UtcNow.AddHours(24));
+            var nextUpdate = new DerGeneralizedTime(DateTime.UtcNow.Add(_responseValidity));
 
             var singleResp = new SingleResponse(
                 certId,

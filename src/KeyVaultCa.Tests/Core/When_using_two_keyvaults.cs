@@ -42,7 +42,7 @@ public class When_using_two_keyvaults(ITestOutputHelper output)
             today.AddDays(30),
                 new SubjectAlternativeNames{DnsNames = { "cert1.test.local" }},
             revocationConfig: null,
-            ct);
+            ct:ct);
         
         // Assert
         var issuedCert = kv2.GetCertificateByName("UnitTestCert");

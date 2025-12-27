@@ -12,9 +12,8 @@ This test demonstrates two .NET applications communicating using mutual TLS (mTL
 │   App       │─────────────────────────>│   (WebAPI)  │
 └─────────────┘                          └─────────────┘
       │                                         │
-      │                                         │
       │ OCSP Check                              │ OCSP Check
-      │ (client cert valid?)                    │ (server cert valid?)
+      │ (server cert valid?)                    │ (client cert valid?)
       ▼                                         ▼
 ┌──────────────────────────────────────────────────────┐
 │         OCSP Responder (ocsp.localhost:5000)         │
@@ -32,7 +31,7 @@ All orchestrated by .NET Aspire AppHost with:
 - Automatic service startup and health monitoring
 - Azurite container for Table Storage
 - Service discovery between apps
-- Dashboard at http://localhost:15888
+- Aspire Dashboard for observability
 ```
 
 ## Prerequisites
@@ -103,7 +102,32 @@ This script will:
 4. ✅ Create Client certificate with `--ocsp-url http://ocsp.localhost:5000`
 5. ✅ Download all certificates to `../certs/` directory
 
-### Step 4: Configure OCSP Responder
+### Step 4: Install Root CA in System Trust Store
+
+**IMPORTANT**: For OCSP checking to work automatically, the root CA must be installed in your system's trust store.
+
+```bash
+cd test/mTLS/scripts
+./manage-trust-store.sh install
+```
+
+This will:
+- ✅ Copy the root CA certificate to `/usr/local/share/ca-certificates/`
+- ✅ Update the system trust store with `update-ca-certificates`
+- ✅ Enable automatic OCSP validation without custom code
+
+**Why this is needed**: .NET's X509Chain automatically performs OCSP revocation checking, but ONLY when using system trust mode. When using `CustomRootTrust` (loading CAs programmatically), .NET disables OCSP checking entirely. By installing the CA in the system trust store, we get:
+- ✅ Automatic OCSP checking via the standard .NET chain validator
+- ✅ No custom certificate validation code required
+- ✅ Standard enterprise security pattern
+- ✅ OCSP requests to `http://ocsp.localhost:5000` happen automatically
+
+**To uninstall** (when done testing):
+```bash
+./manage-trust-store.sh uninstall
+```
+
+### Step 5: Configure OCSP Responder
 
 Update `OcspResponder/appsettings.json` with your Key Vault URL:
 
@@ -116,14 +140,14 @@ Update `OcspResponder/appsettings.json` with your Key Vault URL:
 }
 ```
 
-### Step 5: Add ocsp.localhost to hosts file (if needed)
+### Step 6: Add ocsp.localhost to hosts file (if needed)
 
 The `.localhost` TLD should resolve automatically to 127.0.0.1, but if you encounter issues:
 
 - **Linux/Mac**: Add `127.0.0.1 ocsp.localhost` to `/etc/hosts`
 - **Windows**: Add `127.0.0.1 ocsp.localhost` to `C:\Windows\System32\drivers\etc\hosts`
 
-### Step 6: Start the Aspire AppHost
+### Step 7: Start the Aspire AppHost
 
 **This single command starts everything!** 🚀
 
@@ -134,21 +158,21 @@ dotnet run
 
 Aspire will:
 - ✅ Start Azurite container for Table Storage
-- ✅ Start OCSP Responder on `http://ocsp.localhost:5000`
-- ✅ Start API Server on `https://localhost:7001`
-- ✅ Start Client App (runs once and exits)
-- ✅ Open Aspire Dashboard at `http://localhost:15888`
+- ✅ Start OCSP Responder on `http://localhost:5000`
+- ✅ Start API Server with mTLS enabled
+- ✅ Start Client App (runs 3 requests with 10-second intervals to demonstrate OCSP caching)
+- ✅ Open Aspire Dashboard (URL shown in console output)
 
-### Step 7: Monitor in Aspire Dashboard
+### Step 8: Monitor in Aspire Dashboard
 
-Open the Aspire Dashboard at **http://localhost:15888** to see:
+Open the Aspire Dashboard (URL shown in console) to see:
 
 - **Resources** tab: All running services and their health status
 - **Console Logs** tab: Real-time logs from all services
 - **Traces** tab: OpenTelemetry traces showing the mTLS request flow
 - **Metrics** tab: Performance metrics
 
-### Step 8: Watch for OCSP Requests
+### Step 9: Watch for OCSP Requests
 
 In the Aspire Dashboard, select the **ocsp-responder** service to see OCSP requests:
 
@@ -161,23 +185,31 @@ info: Program[0]
       OCSP response generated, size: 456 bytes
 ```
 
-### Step 9: Verify Client Success
+### Step 10: Verify Client Success
 
 Check the **client-app** service logs in Aspire Dashboard:
 
 ```
-info: Program[0]
+info: ClientWorker[0]
+      === Run 1/3 ===
+info: ClientWorker[0]
+      Calling API server at https://api-server
+info: ClientWorker[0]
       ✅ Successfully received weather forecast from API:
 
 Weather Forecast:
 ==================
-2025-12-15: 15°C (59°F) - Mild
-2025-12-16: 22°C (72°F) - Warm
+2025-12-26: 15°C (59°F) - Mild
+2025-12-27: 22°C (72°F) - Warm
 ...
 
-info: Program[0]
+info: ClientWorker[0]
       ✅ mTLS communication successful with OCSP validation!
+info: ClientWorker[0]
+      Waiting 10 seconds before next run...
 ```
+
+The client runs 3 times to demonstrate OCSP response caching - only the first run triggers OCSP requests.
 
 ## Expected Results
 
@@ -222,6 +254,18 @@ If you get certificate validation errors:
    ```
 3. Check OCSP responder is returning valid responses (check Aspire logs)
 
+### OCSP Validation Silently Fails
+
+If client certificate OCSP validation doesn't work but shows no errors:
+1. **Check OCSP caching**: .NET caches OCSP responses. Re-issue the certificate to force a fresh lookup
+2. **Verify OCSP responder is reachable**:
+   ```bash
+   curl http://ocsp.localhost:5000/
+   # Should return 405 (Method Not Allowed) - means it's reachable
+   ```
+3. **Check OCSP responder logs**: Look for incoming requests in the Aspire Dashboard
+4. **Verify root CA is in system trust store**: Run `scripts/manage-trust-store.sh install`
+
 ### Azurite Container Issues
 
 If Azurite has connection issues:
@@ -263,53 +307,83 @@ Aspire automatically cleans up Docker containers (Azurite) when stopped.
 ```
 test/mTLS/
 ├── README.md                           # This file
+├── mTls.sln                            # Solution file
 ├── AppHost/                            # .NET Aspire orchestration
-│   ├── Program.cs                      # Aspire app host configuration
-│   ├── AppHost.csproj                  # Aspire host project file
-│   └── appsettings.json               # Aspire configuration
+│   └── AppHost.cs                      # Aspire app host (file-scoped program)
 ├── ServiceDefaults/                    # Shared Aspire service configuration
 │   ├── Extensions.cs                   # Service defaults (telemetry, health checks)
-│   └── ServiceDefaults.csproj         # Service defaults project
+│   └── ServiceDefaults.csproj          # Service defaults project
 ├── OcspResponder/                      # OCSP Responder Service
 │   ├── Program.cs                      # Minimal API OCSP endpoints
-│   ├── appsettings.json               # Key Vault & Table Storage config
-│   └── OcspResponder.csproj           # Project file
+│   ├── appsettings.json                # Key Vault & Table Storage config
+│   └── OcspResponder.csproj            # Project file
 ├── ApiServer/                          # API Server with mTLS
 │   ├── Program.cs                      # mTLS configuration & WeatherForecast endpoint
-│   ├── appsettings.json               # Certificate paths configuration
-│   └── ApiServer.csproj               # Project file
+│   ├── appsettings.json                # Certificate paths configuration
+│   └── ApiServer.csproj                # Project file
 ├── ClientApp/                          # Client Application
-│   ├── Program.cs                      # HTTP client with mTLS calling API
-│   ├── appsettings.json               # Certificate paths configuration
-│   └── ClientApp.csproj               # Project file
+│   ├── Program.cs                      # HTTP client with mTLS (runs 3 requests)
+│   ├── appsettings.json                # Certificate paths configuration
+│   └── ClientApp.csproj                # Project file
 ├── scripts/
-│   └── setup-certificates.ps1         # PowerShell script to create all certificates
+│   ├── setup-certificates.ps1          # PowerShell script to create all certificates
+│   └── manage-trust-store.sh           # Script to install/uninstall root CA in system trust
 └── certs/                              # Downloaded certificates (generated by script)
-    ├── root-ca.crt                    # Root CA public certificate
-    ├── ocsp-signer.crt                # OCSP signing public certificate
-    ├── ocsp-signer.pfx                # OCSP signing certificate with private key
-    ├── api-server.crt                 # API server public certificate
-    ├── api-server.pfx                 # API server certificate with private key
-    ├── api-client.crt                 # Client public certificate
-    └── api-client.pfx                 # Client certificate with private key
+    ├── root-ca.crt                     # Root CA public certificate
+    ├── ocsp-signer.pfx                 # OCSP signing certificate with private key
+    ├── api-server.pfx                  # API server certificate with private key
+    └── api-client.pfx                  # Client certificate with private key
 ```
 
 ## Key Features Demonstrated
 
-✅ **Certificate Issuance**: Using KeyVault CA CLI to issue certificates with custom extensions
-✅ **OCSP Signing**: Dedicated OCSP signing certificate with `--ocsp-signing` flag
-✅ **AIA Extension**: Automatic OCSP URL injection via `--ocsp-url` parameter
-✅ **mTLS**: Mutual TLS authentication between client and server
-✅ **OCSP Validation**: Automatic revocation checking via .NET `X509Chain`
-✅ **BouncyCastle Integration**: OCSP response generation using BouncyCastle
-✅ **Azure Integration**: Key Vault for certificate storage, Table Storage for revocation data
-✅ **.NET Aspire**: Modern cloud-native orchestration with observability
+- **Certificate Issuance**: Using KeyVault CA CLI to issue certificates with custom extensions
+- **OCSP Signing**: Dedicated OCSP signing certificate with `--ocsp-signing` flag
+- **AIA Extension**: Automatic OCSP URL injection via `--ocsp-url` parameter
+- **mTLS**: Mutual TLS authentication between client and server
+- **OCSP Validation**: Automatic revocation checking via .NET's TLS stack
+- **OCSP Caching**: Client runs 3 requests to demonstrate response caching (only first triggers OCSP)
+- **BouncyCastle Integration**: OCSP response generation using BouncyCastle
+- **Azure Integration**: Key Vault for certificate storage, Table Storage for revocation data
+- **.NET Aspire**: Modern cloud-native orchestration with observability
 
 ## Notes
 
 - This test uses **real Azure Key Vault** (development/test vault)
 - The `.localhost` TLD is reserved and automatically resolves to 127.0.0.1 (RFC 6761)
-- OCSP checking happens automatically via .NET's `X509Chain` validation
+- **Root CA must be in system trust store** for OCSP to work - `CustomRootTrust` mode disables OCSP checking in .NET
+- OCSP checking happens automatically via .NET's `X509Chain` validation when using system trust
 - Certificate serial numbers are in hex format (uppercase)
 - Aspire provides automatic service discovery, health monitoring, and telemetry
 - All HTTP communication is observable through OpenTelemetry in the Aspire Dashboard
+
+### OCSP Response Caching
+
+.NET caches OCSP responses based on the `nextUpdate` field in the response. This can cause confusion during development when certificates appear to not be validated:
+
+- **Production**: OCSP responses typically have 24-hour validity (1440 minutes)
+- **Demo/Testing**: The OcspResponder in this demo uses 1-minute validity to allow quick testing
+
+If OCSP validation appears to not work:
+1. **Check if it's cached**: Re-issue the certificate to get a new serial number, forcing a fresh OCSP lookup
+2. **Wait for cache expiry**: The cache duration equals the OCSP response validity period
+
+The OCSP response validity is configurable in `OcspResponder/appsettings.json`:
+```json
+{
+  "Ocsp": {
+    "ResponseValidityMinutes": 1440
+  }
+}
+```
+
+For development, `appsettings.Development.json` overrides this to 1 minute for quick iteration.
+
+### Production Deployment Notes
+
+For containerized deployments (Azure Container Apps, AKS):
+- Install the root CA at container startup using a script or init container
+- Mount the CA certificate as a Kubernetes secret
+- Update the system trust store with `update-ca-certificates` before starting the app
+- This enables OCSP validation without requiring `CustomRootTrust` code
+- See `scripts/manage-trust-store.sh` for the trust store installation logic

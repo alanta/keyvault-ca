@@ -1,59 +1,83 @@
-using Azure.Data.Tables;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
+using Azure.Security.KeyVault.Keys.Cryptography;
 using KeyVaultCa.Core;
 using KeyVaultCa.Revocation;
+using KeyVaultCa.Revocation.Interfaces;
 using KeyVaultCa.Revocation.TableStorage;
-using ServiceDefaults;
 using System.Security.Cryptography.X509Certificates;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+var credential = new DefaultAzureCredential();
+
 // Configure Azure Table Storage connection
 var tableConnectionString = builder.Configuration.GetConnectionString("tables")
     ?? throw new InvalidOperationException("Table Storage connection string not configured");
 
-builder.Services.AddSingleton<TableServiceClient>(sp => new TableServiceClient(tableConnectionString));
-builder.Services.AddSingleton<IRevocationStore, TableStorageRevocationStore>();
-
-// Configure Key Vault and OCSP signing certificate
+// Configure Key Vault
 var keyVaultUrl = builder.Configuration["KeyVault:Url"]
     ?? throw new InvalidOperationException("KeyVault URL not configured. Set KeyVault:Url in configuration.");
 
 var ocspSignerCertName = builder.Configuration["KeyVault:OcspSignerCertName"] ?? "ocsp-signer";
+var issuerCertName = builder.Configuration["KeyVault:IssuerCertName"] ?? "root-ca";
+var responseValidityMinutes = builder.Configuration.GetValue<int>("Ocsp:ResponseValidityMinutes", 10);
 
+// Track initialization readiness for health checks
+builder.Services.AddHealthChecks().AddCheck("Initialized", () =>  AppState.Initialized ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy() );
+
+// Register revocation store
+builder.Services.AddSingleton<IRevocationStore>(sp =>
+    new TableStorageRevocationStore(tableConnectionString, sp.GetRequiredService<ILoggerFactory>()));
+
+// Register OCSP response builder with all dependencies
 builder.Services.AddSingleton(sp =>
 {
-    var credential = new DefaultAzureCredential();
+    var logger = sp.GetRequiredService<ILogger<OcspResponseBuilder>>();
     var certClient = new CertificateClient(new Uri(keyVaultUrl), credential);
 
-    // Download OCSP signing certificate from Key Vault
-    var certResponse = certClient.DownloadCertificate(ocspSignerCertName);
-    var ocspSigningCert = certResponse.Value;
+    // Load OCSP signing certificate
+    var ocspCertResponse = certClient.GetCertificateAsync(ocspSignerCertName).GetAwaiter().GetResult();
+    var ocspSigningCert = X509CertificateLoader.LoadCertificate(ocspCertResponse.Value.Cer);
 
-    sp.GetRequiredService<ILogger<Program>>()
-        .LogInformation("Loaded OCSP signing certificate: {Subject}", ocspSigningCert.Subject);
+    logger.LogInformation("Loaded OCSP signing certificate: {subject}", ocspSigningCert.Subject);
 
-    return ocspSigningCert;
+    // Create signature generator for OCSP signing
+    var ocspKeyUri = ocspCertResponse.Value.KeyId;
+    var ocspCryptoClient = new CryptographyClient(ocspKeyUri, credential);
+    var ocspSignatureGenerator = new KeyVaultSignatureGenerator(
+        _ => ocspCryptoClient,
+        ocspKeyUri,
+        ocspSigningCert.SignatureAlgorithm);
+
+    // Load issuer certificate (root CA)
+    var issuerCertResponse = certClient.GetCertificateAsync(issuerCertName).GetAwaiter().GetResult();
+    var issuerCert = X509CertificateLoader.LoadCertificate(issuerCertResponse.Value.Cer);
+
+    logger.LogInformation("Loaded issuer certificate: {subject}", issuerCert.Subject);
+
+    // Create OCSP response builder
+    var revocationStore = sp.GetRequiredService<IRevocationStore>();
+    return new OcspResponseBuilder(
+        revocationStore,
+        ocspSignatureGenerator,
+        ocspSigningCert,
+        issuerCert,
+        logger,
+        TimeSpan.FromMinutes(responseValidityMinutes));
 });
-
-builder.Services.AddSingleton(sp =>
-{
-    var credential = new DefaultAzureCredential();
-    var certClient = new CertificateClient(new Uri(keyVaultUrl), credential);
-    var ocspSigningCert = sp.GetRequiredService<X509Certificate2>();
-
-    return new KeyVaultSignatureGenerator(
-        new Uri(keyVaultUrl),
-        ocspSigningCert.Thumbprint,
-        credential);
-});
-
-builder.Services.AddSingleton<OcspResponseBuilder>();
 
 var app = builder.Build();
+
+// Warm up Key Vault access and cache signing tokens at startup; fail fast if unreachable
+using (var scope = app.Services.CreateScope())
+{
+    _ = scope.ServiceProvider.GetRequiredService<OcspResponseBuilder>();
+    AppState.Initialized = true;
+}
 
 // Minimal API endpoint for OCSP requests
 app.MapPost("/", async (HttpContext context, OcspResponseBuilder responseBuilder, ILogger<Program> logger) =>
@@ -70,7 +94,7 @@ app.MapPost("/", async (HttpContext context, OcspResponseBuilder responseBuilder
             return Results.BadRequest("Empty OCSP request");
         }
 
-        logger.LogInformation("OCSP request received, size: {Size} bytes", requestBytes.Length);
+        logger.LogInformation("OCSP request received from {RemoteIpAddress}, size: {Size} bytes", context.Connection.RemoteIpAddress, requestBytes.Length);
 
         var responseBytes = await responseBuilder.BuildResponseAsync(requestBytes, context.RequestAborted);
 
@@ -86,13 +110,13 @@ app.MapPost("/", async (HttpContext context, OcspResponseBuilder responseBuilder
 });
 
 // Optional: GET endpoint for base64-encoded OCSP requests (RFC 6960 Appendix A.1)
-app.MapGet("/{base64Request}", async (string base64Request, OcspResponseBuilder responseBuilder, ILogger<Program> logger) =>
+app.MapGet("/{base64Request}", async (HttpContext context, string base64Request, OcspResponseBuilder responseBuilder, ILogger<Program> logger) =>
 {
     try
     {
         var requestBytes = Convert.FromBase64String(base64Request.Replace('_', '/').Replace('-', '+'));
 
-        logger.LogInformation("OCSP GET request received, size: {Size} bytes", requestBytes.Length);
+        logger.LogInformation("OCSP GET request received from {RemoteIpAddress}, size: {Size} bytes", context.Connection.RemoteIpAddress, requestBytes.Length);
 
         var responseBytes = await responseBuilder.BuildResponseAsync(requestBytes, CancellationToken.None);
 
@@ -114,4 +138,10 @@ app.MapGet("/{base64Request}", async (string base64Request, OcspResponseBuilder 
 
 app.MapDefaultEndpoints();
 
-app.Run();
+await app.RunAsync();
+
+
+public static class AppState
+{
+    public static bool Initialized { get; set; } = false;
+}

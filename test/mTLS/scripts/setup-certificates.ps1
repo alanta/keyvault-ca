@@ -127,29 +127,26 @@ Write-Host "Step 5: Downloading certificates..." -ForegroundColor Cyan
 
 # Download Root CA
 Write-Host "  Downloading root-ca..." -ForegroundColor Gray
-& $CliPath download-cert -kv $KeyVaultName root-ca
+& $CliPath download-cert --no-password -kv $KeyVaultName root-ca
 if ($LASTEXITCODE -ne 0) { Write-Host "❌ Failed to download root-ca" -ForegroundColor Red; exit 1 }
 Move-Item -Force "root-ca.crt" "$CertsDir/root-ca.crt"
 
 # Download OCSP Signer
 Write-Host "  Downloading ocsp-signer..." -ForegroundColor Gray
-& $CliPath download-cert -kv $KeyVaultName -k ocsp-signer
-if ($LASTEXITCODE -ne 0) { Write-Host "❌ Failed to download ocsp-signer" -ForegroundColor Red; exit 1 }
-Move-Item -Force "ocsp-signer.crt" "$CertsDir/ocsp-signer.crt"
+& $CliPath download-cert --pfx --key --no-password -kv $KeyVaultName -k ocsp-signer
+if ($LASTEXITCODE -ne 0) { Write-Host "❌ Failed to download ocsp-signer pfx" -ForegroundColor Red; exit 1 }
 Move-Item -Force "ocsp-signer.pfx" "$CertsDir/ocsp-signer.pfx"
 
 # Download API Server
 Write-Host "  Downloading api-server..." -ForegroundColor Gray
-& $CliPath download-cert -kv $KeyVaultName -k api-server
+& $CliPath download-cert --pfx --key --no-password -kv $KeyVaultName -k api-server
 if ($LASTEXITCODE -ne 0) { Write-Host "❌ Failed to download api-server" -ForegroundColor Red; exit 1 }
-Move-Item -Force "api-server.crt" "$CertsDir/api-server.crt"
 Move-Item -Force "api-server.pfx" "$CertsDir/api-server.pfx"
 
 # Download API Client
 Write-Host "  Downloading api-client..." -ForegroundColor Gray
-& $CliPath download-cert -kv $KeyVaultName -k api-client
+& $CliPath download-cert --pfx --key --no-password -kv $KeyVaultName -k api-client
 if ($LASTEXITCODE -ne 0) { Write-Host "❌ Failed to download api-client" -ForegroundColor Red; exit 1 }
-Move-Item -Force "api-client.crt" "$CertsDir/api-client.crt"
 Move-Item -Force "api-client.pfx" "$CertsDir/api-client.pfx"
 
 Write-Host "✅ All certificates downloaded to $CertsDir" -ForegroundColor Green
@@ -160,10 +157,10 @@ Write-Host "Step 6: Verifying OCSP URL in certificates..." -ForegroundColor Cyan
 
 if (Get-Command openssl -ErrorAction SilentlyContinue) {
     Write-Host "  API Server certificate AIA extension:" -ForegroundColor Gray
-    openssl x509 -in "$CertsDir/api-server.crt" -text -noout | Select-String -Pattern "OCSP - URI" -Context 0,1
+    openssl pkcs12 -in "$CertsDir/api-server.pfx" -nokeys -clcerts -passin pass: | openssl x509 -text -noout | Select-String -Pattern "OCSP - URI" -Context 0,1
 
     Write-Host "  API Client certificate AIA extension:" -ForegroundColor Gray
-    openssl x509 -in "$CertsDir/api-client.crt" -text -noout | Select-String -Pattern "OCSP - URI" -Context 0,1
+    openssl pkcs12 -in "$CertsDir/api-client.pfx" -nokeys -clcerts -passin pass: | openssl x509 -text -noout | Select-String -Pattern "OCSP - URI" -Context 0,1
 } else {
     Write-Host "  ⚠️  OpenSSL not found, skipping certificate verification" -ForegroundColor Yellow
 }

@@ -46,8 +46,8 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
                 DnsNames = { "test.local" }
             },
             revocationConfig: null,
-            ct);
-        ;
+            ct:ct);
+        
         // Act
         // Re-issue the leaf cert
         // It should keep all extensions but update the validity period.
@@ -65,7 +65,7 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
                 DnsNames = { "test.local" }
             },
             revocationConfig: null,
-            ct);
+            ct: ct);
 
         /*await kvCertProvider.RenewCertificateAsync(
             "RenewMe",
@@ -125,7 +125,7 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
                 DnsNames = { "test.local" }
             },
             revocationConfig: null,
-            ct);
+            ct:ct);
 
         // Assert
         await issueTask.Should().NotThrowAsync("pending operations from other issuers should be cancelled before issuing");
@@ -178,7 +178,7 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
                 DnsNames = { "test.local" }
             },
             revocationConfig: null,
-            ct);
+            ct:ct);
 
         // Assert
         await issueTask.Should().NotThrowAsync("pending operations with issuer Unknown should be continued");
