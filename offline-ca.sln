@@ -15,7 +15,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyVaultCa.Revocation", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyVaultCa.Revocation.TableStorage", "src\KeyVaultCa.Revocation.TableStorage\KeyVaultCa.Revocation.TableStorage.csproj", "{01F4548F-8846-498B-BF15-A3457CFDDEE5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyVaultCa.OcspResponder", "src\KeyVaultCa.OcspResponder\KeyVaultCa.OcspResponder.csproj", "{4456AD6D-0569-4920-848F-96BB12DF5C96}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyVaultCa.Revocation.Ocsp.Hosting", "src\KeyVaultCa.Revocation.Ocsp.Hosting\KeyVaultCa.Revocation.Ocsp.Hosting.csproj", "{4456AD6D-0569-4920-848F-96BB12DF5C96}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeyVaultCa.Revocation.Tests", "src\KeyVaultCa.Revocation.Tests\KeyVaultCa.Revocation.Tests.csproj", "{4C1C8788-B288-4FA9-91CB-71BCAF65936F}"
 EndProject

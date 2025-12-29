@@ -1,6 +1,0 @@
-@KeyVaultCa.OcspResponder_HostAddress = http://localhost:5211
-
-GET {{KeyVaultCa.OcspResponder_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
