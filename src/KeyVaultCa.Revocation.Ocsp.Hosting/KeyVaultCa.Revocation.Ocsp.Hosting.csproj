@@ -10,7 +10,6 @@
   <ItemGroup>
     <ProjectReference Include="..\KeyVaultCa.Core\KeyVaultCa.Core.csproj" />
     <ProjectReference Include="..\KeyVaultCa.Revocation\KeyVaultCa.Revocation.csproj" />
-    <ProjectReference Include="..\KeyVaultCa.Revocation.TableStorage\KeyVaultCa.Revocation.TableStorage.csproj" />
   </ItemGroup>
 
   <ItemGroup>

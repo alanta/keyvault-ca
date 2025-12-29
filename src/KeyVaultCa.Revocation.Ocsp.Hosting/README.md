@@ -13,11 +13,17 @@ A modern, easy-to-use ASP.NET Core hosting package for OCSP (Online Certificate 
 
 ## Quick Start
 
-### 1. Add Package Reference
+### 1. Add Package References
 
 ```xml
+<!-- OCSP hosting with Azure Key Vault -->
 <PackageReference Include="KeyVaultCa.Revocation.Ocsp.Hosting" />
+
+<!-- Revocation store implementation (Table Storage example) -->
+<PackageReference Include="KeyVaultCa.Revocation.TableStorage" />
 ```
+
+**Note**: The hosting package is agnostic to the revocation store. You can use any `IRevocationStore` implementation.
 
 ### 2. Configure in appsettings.json
 
@@ -39,13 +45,14 @@ A modern, easy-to-use ASP.NET Core hosting package for OCSP (Online Certificate 
 
 ```csharp
 using KeyVaultCa.Revocation.Ocsp.Hosting;
+using KeyVaultCa.Revocation.TableStorage;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add OCSP responder with Azure Key Vault
 builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
 
-// Add revocation store
+// Add revocation store (Table Storage implementation)
 builder.Services.AddTableStorageRevocationStore(
     builder.Configuration.GetConnectionString("tables")!);
 
@@ -98,6 +105,7 @@ The Azure identity (managed identity, service principal, or user) must have:
 ```csharp
 // Program.cs
 using KeyVaultCa.Revocation.Ocsp.Hosting;
+using KeyVaultCa.Revocation.TableStorage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -140,6 +148,138 @@ This package is part of the KeyVaultCa toolkit:
 │  - KeyVaultSignatureGenerator           │
 └─────────────────────────────────────────┘
 ```
+
+## Performance: Output Caching
+
+Enable response caching to dramatically improve performance by eliminating Table Storage lookups and Key Vault signing operations on cache hits.
+
+### Performance Impact
+
+- **Without cache**: ~100-300ms per request (Table Storage + Key Vault signing)
+- **With in-memory cache hit**: <1ms
+- **With Redis cache hit**: ~5ms
+
+### How It Works
+
+This package configures an OCSP-specific cache policy when `EnableCaching` is true, but **does not add caching services**. You choose your own caching implementation based on your deployment needs:
+
+- **In-memory**: Best for single-instance deployments, lowest latency
+- **Redis**: Best for multi-instance/load-balanced deployments, shared cache
+
+### Setup: In-Memory Cache (Single Instance)
+
+**appsettings.json:**
+```json
+{
+  "OcspResponder": {
+    "EnableCaching": true
+    // CacheDurationMinutes defaults to ResponseValidityMinutes if not set
+  }
+}
+```
+
+**Program.cs:**
+```csharp
+using KeyVaultCa.Revocation.Ocsp.Hosting;
+using KeyVaultCa.Revocation.TableStorage;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add in-memory output caching
+builder.Services.AddOutputCache();
+
+// Add OCSP responder (configures the "ocsp" cache policy)
+builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
+builder.Services.AddTableStorageRevocationStore(
+    builder.Configuration.GetConnectionString("tables")!);
+
+var app = builder.Build();
+
+// Enable output cache middleware
+app.UseOutputCache();
+
+app.MapOcspResponder();
+await app.RunAsync();
+```
+
+### Setup: Distributed Cache (Redis - Multi-Instance)
+
+**Install Redis package:**
+```bash
+dotnet add package Microsoft.AspNetCore.OutputCaching.StackExchangeRedis
+```
+
+**appsettings.json:**
+```json
+{
+  "OcspResponder": {
+    "EnableCaching": true
+    // CacheDurationMinutes defaults to ResponseValidityMinutes if not set
+  },
+  "ConnectionStrings": {
+    "redis": "localhost:6379"
+  }
+}
+```
+
+**Program.cs:**
+```csharp
+using KeyVaultCa.Revocation.Ocsp.Hosting;
+using KeyVaultCa.Revocation.TableStorage;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add Redis distributed output caching
+builder.Services.AddStackExchangeRedisOutputCache(options =>
+{
+    options.Configuration = builder.Configuration.GetConnectionString("redis");
+});
+
+// Add OCSP responder (configures the "ocsp" cache policy)
+builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
+builder.Services.AddTableStorageRevocationStore(
+    builder.Configuration.GetConnectionString("tables")!);
+
+var app = builder.Build();
+
+// Enable output cache middleware
+app.UseOutputCache();
+
+app.MapOcspResponder();
+await app.RunAsync();
+```
+
+### Cache Invalidation Considerations
+
+When a certificate is revoked, cached "good" responses will persist until the TTL expires.
+
+**Default Behavior:**
+- By default, `CacheDurationMinutes` equals `ResponseValidityMinutes`, so cached responses expire exactly when the OCSP response itself expires
+- This maximizes cache effectiveness while maintaining OCSP protocol correctness
+
+**Alternative Strategies:**
+
+1. **Short TTL**: Set `CacheDurationMinutes` to 5-10 minutes (less than `ResponseValidityMinutes`)
+   - Faster revocation propagation
+   - Good for high-security environments
+   - Reduces cache effectiveness
+
+2. **Manual Invalidation**: Implement cache eviction on revocation events
+   - Requires custom code using `IOutputCacheStore`
+   - Best freshness guarantee
+   - More complex to implement
+
+### Cache Configuration Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `EnableCaching` | Enable OCSP cache policy | `false` (opt-in) |
+| `CacheDurationMinutes` | How long to cache responses (must be ≤ ResponseValidityMinutes) | `0` (uses ResponseValidityMinutes) |
+
+**Notes**:
+- The caching implementation (in-memory vs Redis) is controlled by which `AddOutputCache*()` method you call, not by configuration
+- If `CacheDurationMinutes` is not set or is 0, it defaults to `ResponseValidityMinutes` to match OCSP response validity
+- Setting `CacheDurationMinutes` higher than `ResponseValidityMinutes` will throw an exception at startup
 
 ## Troubleshooting
 

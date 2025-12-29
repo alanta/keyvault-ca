@@ -2,6 +2,7 @@ using KeyVaultCa.Revocation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace KeyVaultCa.Revocation.Ocsp.Hosting;
@@ -22,8 +23,12 @@ public static class OcspEndpointExtensions
         this IEndpointRouteBuilder endpoints,
         string pattern = "/")
     {
+        // Check if caching is enabled
+        var options = endpoints.ServiceProvider.GetService<OcspHostingOptions>();
+        var cachingEnabled = options?.EnableCaching ?? false;
+
         // POST endpoint (RFC 6960 standard method)
-        endpoints.MapPost(pattern, async (
+        var postEndpoint = endpoints.MapPost(pattern, async (
             HttpContext context,
             OcspResponseBuilder responseBuilder,
             ILogger<OcspResponseBuilder> logger) =>
@@ -63,8 +68,14 @@ public static class OcspEndpointExtensions
         .WithName("OcspPost")
         .WithOpenApi();
 
+        // Apply caching if enabled
+        if (cachingEnabled)
+        {
+            postEndpoint.CacheOutput("ocsp");
+        }
+
         // GET endpoint (RFC 6960 Appendix A.1 - optional)
-        endpoints.MapGet($"{pattern}{{base64Request}}", async (
+        var getEndpoint = endpoints.MapGet($"{pattern}{{base64Request}}", async (
             HttpContext context,
             string base64Request,
             OcspResponseBuilder responseBuilder,
@@ -103,6 +114,12 @@ public static class OcspEndpointExtensions
         })
         .WithName("OcspGet")
         .WithOpenApi();
+
+        // Apply caching if enabled
+        if (cachingEnabled)
+        {
+            getEndpoint.CacheOutput("ocsp");
+        }
 
         return endpoints;
     }

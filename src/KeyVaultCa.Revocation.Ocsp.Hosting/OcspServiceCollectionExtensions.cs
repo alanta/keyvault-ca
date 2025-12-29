@@ -5,7 +5,7 @@ using Azure.Security.KeyVault.Keys.Cryptography;
 using KeyVaultCa.Core;
 using KeyVaultCa.Revocation;
 using KeyVaultCa.Revocation.Interfaces;
-using KeyVaultCa.Revocation.TableStorage;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -106,30 +106,56 @@ public static class OcspServiceCollectionExtensions
         services.AddHealthChecks()
             .AddCheck<OcspHealthCheck>("ocsp_ready");
 
-        return services;
-    }
-
-    /// <summary>
-    /// Adds Azure Table Storage as the revocation store for OCSP responses.
-    /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="connectionString">Azure Table Storage connection string.</param>
-    /// <returns>The service collection for chaining.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if connection string is null or empty.</exception>
-    public static IServiceCollection AddTableStorageRevocationStore(
-        this IServiceCollection services,
-        string connectionString)
-    {
-        if (string.IsNullOrWhiteSpace(connectionString))
+        // Configure OCSP-specific caching policy if enabled
+        // Note: Consumers must add their own output caching implementation
+        // (e.g., services.AddOutputCache() or services.AddStackExchangeRedisOutputCache())
+        if (options.EnableCaching)
         {
-            throw new ArgumentNullException(nameof(connectionString),
-                "Table Storage connection string is required");
-        }
+            // Default cache duration to response validity if not set
+            var cacheDuration = options.CacheDurationMinutes > 0
+                ? options.CacheDurationMinutes
+                : options.ResponseValidityMinutes;
 
-        services.AddSingleton<IRevocationStore>(sp =>
-            new TableStorageRevocationStore(
-                connectionString,
-                sp.GetRequiredService<ILoggerFactory>()));
+            // Validate cache duration doesn't exceed response validity
+            if (cacheDuration > options.ResponseValidityMinutes)
+            {
+                throw new InvalidOperationException(
+                    $"CacheDurationMinutes ({cacheDuration}) cannot exceed ResponseValidityMinutes ({options.ResponseValidityMinutes}). " +
+                    "Caching responses beyond their validity period would violate OCSP protocol.");
+            }
+
+            services.Configure<Microsoft.AspNetCore.OutputCaching.OutputCacheOptions>(cacheOptions =>
+            {
+                cacheOptions.AddPolicy("ocsp", builder =>
+                {
+                    builder
+                        .Expire(TimeSpan.FromMinutes(cacheDuration))
+                        .VaryByValue(context =>
+                        {
+                            // Cache key based on request body hash (contains serial number)
+                            // We need to read the body, hash it, and reset the position
+                            context.Request.EnableBuffering();
+
+                            using var reader = new StreamReader(
+                                context.Request.Body,
+                                encoding: System.Text.Encoding.UTF8,
+                                detectEncodingFromByteOrderMarks: false,
+                                leaveOpen: true);
+
+                            var body = reader.ReadToEndAsync().GetAwaiter().GetResult();
+                            context.Request.Body.Position = 0; // Reset for handler
+
+                            // Use SHA256 hash of request as cache key
+                            var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
+                            var hash = System.Security.Cryptography.SHA256.HashData(bodyBytes);
+
+                            return new KeyValuePair<string, string>(
+                                "ocsp-request-hash",
+                                Convert.ToBase64String(hash));
+                        });
+                });
+            });
+        }
 
         return services;
     }
