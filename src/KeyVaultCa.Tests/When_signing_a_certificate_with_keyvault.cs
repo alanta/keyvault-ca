@@ -30,7 +30,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var certificate = store.GetCertificateByName("UnitTestCA");
         var certBytes = certificate!.Cer;
         certBytes.Should().NotBeNull();
-        var cert = new X509Certificate2(certBytes);
+        var cert = X509CertificateLoader.LoadCertificate(certBytes);
         cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.Should().BeTrue();
 
         store.CertificateVersions[1].Policy.ReuseKey.Should().BeTrue("CA root should reuse the key created for it in the first version.");
@@ -76,7 +76,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var certificate = certificateOperations.GetCertificateByName("UnitTestIntermediate");
         var certBytes = certificate!.Cer;
         certBytes.Should().NotBeNull();
-        var cert = new X509Certificate2(certBytes);
+        var cert = X509CertificateLoader.LoadCertificate(certBytes);
         cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.Should().BeTrue("Intermediate certificate should be a CA certificate");
         cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().HasPathLengthConstraint.Should().BeTrue("Intermediate certificate should have a path length constraint");
         cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().PathLengthConstraint.Should().Be(0, "Intermediate certificate should have a path length constraint of 0");
@@ -139,7 +139,7 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         var certificate = certificateOperations.GetCertificateByName("LeafWithSAN");
         var certBytes = certificate!.Cer;
         certBytes.Should().NotBeNull();
-        var cert = new X509Certificate2(certBytes);
+        var cert = X509CertificateLoader.LoadCertificate(certBytes);
         cert.NotAfter.Should().BeBefore(DateTime.Now.AddDays(30));
         var basicConstraints = cert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
         basicConstraints!.CertificateAuthority.Should().BeFalse();

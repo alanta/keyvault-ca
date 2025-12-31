@@ -25,7 +25,7 @@ public class DownloadCert(ILoggerFactory loggerFactory)
 
         // First, get the certificate to check if it's a CA certificate
         var certInfo = await certificateClient.GetCertificateAsync(name, cancellationToken);
-        var publicCert = new X509Certificate2(certInfo.Value.Cer);
+        var publicCert = X509CertificateLoader.LoadCertificate(certInfo.Value.Cer);
         
         // Check if this is a CA certificate
         var isCaCert = IsCaCertificate(publicCert);
@@ -40,7 +40,7 @@ public class DownloadCert(ILoggerFactory loggerFactory)
         
         // Download with private key only if needed and allowed
         X509Certificate2 cert;
-        if (key)
+        if (key) 
         {
             cert = await certificateClient.DownloadCertificateAsync(name, null, cancellationToken);
         }

@@ -270,7 +270,7 @@ namespace KeyVaultCa.Core
                 throw new ArgumentException("Issuer certificate not found.");
             }
 
-            var signingCert = new X509Certificate2(certBundle.Value.Cer);
+            var signingCert = X509CertificateLoader.LoadCertificate(certBundle.Value.Cer);
 
             return await CertificateFactory.SignRequest(
                 csrOperation.Properties.Csr,

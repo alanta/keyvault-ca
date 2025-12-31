@@ -30,7 +30,7 @@ public class GenerateCrl(ILoggerFactory loggerFactory)
         // Get the issuer certificate from Key Vault
         var certificateClient = clientFactory.GetCertificateClientFactory(issuer.KeyVaultUrl);
         var certResponse = await certificateClient.GetCertificateAsync(issuer.SecretName, cancellationToken);
-        var issuerCertificate = new X509Certificate2(certResponse.Value.Cer);
+        var issuerCertificate = X509CertificateLoader.LoadCertificate(certResponse.Value.Cer);
 
         _logger.LogInformation("Loaded issuer certificate: {subject}", issuerCertificate.Subject);
 

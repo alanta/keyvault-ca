@@ -51,8 +51,8 @@ public class When_using_two_keyvaults(ITestOutputHelper output)
         var caCert = kv1.GetCertificateByName("UnitTestCA");
         caCert.Should().NotBeNull("the CA certificate should exist in the first Key Vault");
 
-        var issuedX509 = new X509Certificate2(issuedCert!.Cer);
-        var caX509 = new X509Certificate2(caCert!.Cer);
+        var issuedX509 = X509CertificateLoader.LoadCertificate(issuedCert!.Cer);
+        var caX509 = X509CertificateLoader.LoadCertificate(caCert!.Cer);
 
         issuedX509.Issuer.Should().Be(caX509.Subject, "the leaf certificate should be issued by the CA stored in the other Key Vault");
     }

@@ -96,7 +96,7 @@ namespace KeyVaultCA.Tests
             var operation = await certificateClient.GetCertificateOperationAsync(pendingCertificateName);
             
             var certBundle = await certificateClient.GetCertificateAsync(issuerCertificateName);
-            var signingCert = new X509Certificate2(certBundle.Value.Cer);
+            var signingCert = X509CertificateLoader.LoadCertificate(certBundle.Value.Cer);
 
             var signatureGenerator = new KeyVaultSignatureGenerator(uri => new CryptographyClient(uri, credential), certBundle.Value.KeyId,  signingCert.SignatureAlgorithm);
 

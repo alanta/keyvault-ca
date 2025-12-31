@@ -11,7 +11,7 @@ on:
 
 env:
   DOTNET_VERSION: '8.0.x'
-  SOLUTION_FILE: offline-ca.sln
+  SOLUTION_FILE: keyvault-ca.sln
 
 jobs:
   build-test:

@@ -76,7 +76,7 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
         // Verify
         // Validity period starts after previous version
         var renewedCert = await certificateClient.GetCertificateAsync("RenewMe", ct);
-        var x509Renewed = new X509Certificate2(renewedCert.Value.Cer);
+        var x509Renewed = X509CertificateLoader.LoadCertificate(renewedCert.Value.Cer);
         x509Renewed.NotBefore.Should().Be(today.AddDays(30));
         x509Renewed.NotAfter.Should().Be(today.AddDays(60));
     }
