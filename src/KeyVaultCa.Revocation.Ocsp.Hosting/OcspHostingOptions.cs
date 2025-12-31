@@ -32,18 +32,4 @@ public class OcspHostingOptions
     /// Default: 10 minutes
     /// </summary>
     public int ResponseValidityMinutes { get; set; } = 10;
-
-    /// <summary>
-    /// Enable response caching for better performance.
-    /// When enabled, caches OCSP responses to eliminate Table Storage lookups and Key Vault signing on cache hits.
-    /// Default: false (opt-in for safety)
-    /// </summary>
-    public bool EnableCaching { get; set; } = false;
-
-    /// <summary>
-    /// Cache duration in minutes. Must be less than or equal to ResponseValidityMinutes.
-    /// If not set or 0, defaults to ResponseValidityMinutes.
-    /// Default: 0 (use ResponseValidityMinutes)
-    /// </summary>
-    public int CacheDurationMinutes { get; set; } = 0;
 }

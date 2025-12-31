@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -69,9 +70,20 @@ public class OcspResponseBuilder
             var tbsRequest = ocspReq.TbsRequest;
             var requestList = tbsRequest.RequestList;
 
+            // Extract nonce from request extensions (RFC 6960 Appendix B)
+            var nonce = ExtractNonce(tbsRequest.RequestExtensions);
+
             if (requestList == null || requestList.Count == 0)
             {
                 _logger.LogWarning("OCSP request contains no certificate requests");
+                return CreateErrorResponse(OcspResponseStatus.MalformedRequest);
+            }
+
+            // RFC 6960 allows multiple requests, but we only support one for simplicity
+            if (requestList.Count > 1)
+            {
+                _logger.LogWarning("OCSP request contains {Count} requests; only one supported",
+                    requestList.Count);
                 return CreateErrorResponse(OcspResponseStatus.MalformedRequest);
             }
 
@@ -81,6 +93,13 @@ public class OcspResponseBuilder
             var serialNumber = certId.SerialNumber.Value.ToString(16).ToUpperInvariant();
 
             _logger.LogInformation("Processing OCSP request for certificate serial: {Serial}", serialNumber);
+
+            // Validate that the certificate was issued by our CA (RFC 6960 Section 4.1.1)
+            if (!ValidateIssuer(certId, _issuerCert))
+            {
+                _logger.LogWarning("OCSP request for certificate not issued by this CA (serial: {Serial})", serialNumber);
+                return CreateErrorResponse(OcspResponseStatus.Unauthorized);
+            }
 
             // Lookup revocation status
             var revocation = await _revocationStore.GetRevocationAsync(serialNumber, ct);
@@ -108,23 +127,29 @@ public class OcspResponseBuilder
             var thisUpdate = new DerGeneralizedTime(DateTime.UtcNow);
             var nextUpdate = new DerGeneralizedTime(DateTime.UtcNow.Add(_responseValidity));
 
+            // Build single extensions (echo nonce if present in request)
+            var singleExtensions = BuildSingleExtensions(nonce);
+
             var singleResp = new SingleResponse(
                 certId,
                 certStatus,
                 thisUpdate,
                 nextUpdate,
-                null); // No single extensions
+                singleExtensions);
 
             // Build response data
             var responderID = GetResponderId();
             var producedAt = new DerGeneralizedTime(DateTime.UtcNow);
             var responses = new DerSequence(singleResp);
 
+            // Build response extensions (RFC 6960 Section 4.2.2.2.1 - nocheck required)
+            var responseExtensions = BuildResponseExtensions();
+
             var responseData = new ResponseData(
                 responderID,
                 producedAt,
                 responses,
-                null); // No response extensions
+                responseExtensions);
 
             // Sign the response data
             var signatureBytes = await SignResponseDataAsync(responseData, ct);
@@ -154,9 +179,19 @@ public class OcspResponseBuilder
             _logger.LogInformation("Successfully generated OCSP response for {Serial}", serialNumber);
             return ocspResponse.GetEncoded();
         }
+        catch (Asn1ParsingException ex)
+        {
+            _logger.LogError(ex, "Malformed OCSP request (ASN.1 parsing error)");
+            return CreateErrorResponse(OcspResponseStatus.MalformedRequest);
+        }
+        catch (NotSupportedException ex)
+        {
+            _logger.LogError(ex, "Unsupported hash algorithm in OCSP request");
+            return CreateErrorResponse(OcspResponseStatus.MalformedRequest);
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing OCSP request");
+            _logger.LogError(ex, "Internal error processing OCSP request");
             return CreateErrorResponse(OcspResponseStatus.InternalError);
         }
     }
@@ -210,6 +245,96 @@ public class OcspResponseBuilder
         {
             return "1.2.840.113549.1.1.11"; // sha256WithRSAEncryption
         }
+    }
+
+    /// <summary>
+    /// Extracts nonce from OCSP request extensions.
+    /// RFC 6960 Appendix B - Nonce extension OID 1.3.6.1.5.5.7.48.1.2
+    /// </summary>
+    private byte[]? ExtractNonce(X509Extensions? extensions)
+    {
+        if (extensions == null) return null;
+
+        var nonceOid = new DerObjectIdentifier("1.3.6.1.5.5.7.48.1.2");
+        var nonceExt = extensions.GetExtension(nonceOid);
+        if (nonceExt == null) return null;
+
+        var octets = Asn1OctetString.GetInstance(
+            Asn1Object.FromByteArray(nonceExt.Value.GetOctets()));
+        return octets.GetOctets();
+    }
+
+    /// <summary>
+    /// Builds single response extensions, echoing nonce if present.
+    /// RFC 6960 Appendix B requires echoing nonce to prevent replay attacks.
+    /// </summary>
+    private X509Extensions? BuildSingleExtensions(byte[]? nonce)
+    {
+        if (nonce == null) return null;
+
+        var nonceOid = new DerObjectIdentifier("1.3.6.1.5.5.7.48.1.2");
+        var nonceValue = new DerOctetString(nonce);
+        var nonceExt = new Org.BouncyCastle.Asn1.X509.X509Extension(false, new DerOctetString(nonceValue.GetEncoded()));
+
+        var extensions = new Dictionary<DerObjectIdentifier, Org.BouncyCastle.Asn1.X509.X509Extension>
+        {
+            { nonceOid, nonceExt }
+        };
+
+        return new X509Extensions(extensions);
+    }
+
+    /// <summary>
+    /// Builds response extensions including the required "nocheck" extension.
+    /// RFC 6960 Section 4.2.2.2.1 requires OCSP signing certificates to have nocheck extension.
+    /// </summary>
+    private X509Extensions BuildResponseExtensions()
+    {
+        // id-pkix-ocsp-nocheck (1.3.6.1.5.5.7.48.1.5)
+        var nocheckOid = new DerObjectIdentifier("1.3.6.1.5.5.7.48.1.5");
+        var nocheckValue = DerNull.Instance.GetEncoded();
+        var nocheckExt = new Org.BouncyCastle.Asn1.X509.X509Extension(false, new DerOctetString(nocheckValue));
+
+        var extensions = new Dictionary<DerObjectIdentifier, Org.BouncyCastle.Asn1.X509.X509Extension>
+        {
+            { nocheckOid, nocheckExt }
+        };
+
+        return new X509Extensions(extensions);
+    }
+
+    /// <summary>
+    /// Validates that the CertID in the OCSP request matches our issuer certificate.
+    /// Computes issuerNameHash and issuerKeyHash and compares them using constant-time comparison.
+    /// </summary>
+    private bool ValidateIssuer(CertID certId, X509Certificate2 issuerCert)
+    {
+        // Get hash algorithm from CertID
+        var hashAlgOid = certId.HashAlgorithm.Algorithm.Id;
+        HashAlgorithm hashAlg = hashAlgOid switch
+        {
+            "1.3.14.3.2.26" => SHA1.Create(),                   // sha1
+            "2.16.840.1.101.3.4.2.1" => SHA256.Create(),        // sha256
+            "2.16.840.1.101.3.4.2.2" => SHA384.Create(),        // sha384
+            "2.16.840.1.101.3.4.2.3" => SHA512.Create(),        // sha512
+            _ => throw new NotSupportedException($"Hash algorithm {hashAlgOid} not supported in OCSP request")
+        };
+
+        // Compute expected issuerNameHash
+        var issuerDN = issuerCert.SubjectName.RawData;
+        var expectedNameHash = hashAlg.ComputeHash(issuerDN);
+
+        // Compute expected issuerKeyHash (from subject public key field)
+        var issuerKeyInfo = issuerCert.PublicKey.EncodedKeyValue.RawData;
+        var expectedKeyHash = hashAlg.ComputeHash(issuerKeyInfo);
+
+        // Constant-time comparison to prevent timing attacks
+        var nameHashMatch = CryptographicOperations.FixedTimeEquals(
+            certId.IssuerNameHash.GetOctets(), expectedNameHash);
+        var keyHashMatch = CryptographicOperations.FixedTimeEquals(
+            certId.IssuerKeyHash.GetOctets(), expectedKeyHash);
+
+        return nameHashMatch && keyHashMatch;
     }
 
     private static byte[] CreateErrorResponse(int status)

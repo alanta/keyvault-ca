@@ -1,8 +1,7 @@
-using KeyVaultCa.Revocation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace KeyVaultCa.Revocation.Ocsp.Hosting;
@@ -23,18 +22,15 @@ public static class OcspEndpointExtensions
         this IEndpointRouteBuilder endpoints,
         string pattern = "/")
     {
-        // Check if caching is enabled
-        var options = endpoints.ServiceProvider.GetService<OcspHostingOptions>();
-        var cachingEnabled = options?.EnableCaching ?? false;
-
         // POST endpoint (RFC 6960 standard method)
-        var postEndpoint = endpoints.MapPost(pattern, async (
+        endpoints.MapPost(pattern, async (
             HttpContext context,
             OcspResponseBuilder responseBuilder,
             ILogger<OcspResponseBuilder> logger) =>
         {
             try
             {
+                // Read request body (size limit enforced by framework via RequestSizeLimitAttribute)
                 using var ms = new MemoryStream();
                 await context.Request.Body.CopyToAsync(ms);
                 var requestBytes = ms.ToArray();
@@ -66,16 +62,11 @@ public static class OcspEndpointExtensions
             }
         })
         .WithName("OcspPost")
+        .WithMetadata(new RequestSizeLimitAttribute(65536)) // RFC 6960 Appendix A.1 - Cap at 64KB to prevent DoS
         .WithOpenApi();
 
-        // Apply caching if enabled
-        if (cachingEnabled)
-        {
-            postEndpoint.CacheOutput("ocsp");
-        }
-
         // GET endpoint (RFC 6960 Appendix A.1 - optional)
-        var getEndpoint = endpoints.MapGet($"{pattern}{{base64Request}}", async (
+        endpoints.MapGet($"{pattern}{{base64Request}}", async (
             HttpContext context,
             string base64Request,
             OcspResponseBuilder responseBuilder,
@@ -83,6 +74,16 @@ public static class OcspEndpointExtensions
         {
             try
             {
+                // RFC 6960 Appendix A.1 - GET requests limited to ~1KB (typical URL length limits)
+                const int MaxBase64Length = 1365; // ~1KB decoded (base64 = 4/3 overhead)
+                if (base64Request.Length > MaxBase64Length)
+                {
+                    logger.LogWarning(
+                        "OCSP GET request base64 too long: {Length} chars (max {Max})",
+                        base64Request.Length, MaxBase64Length);
+                    return Results.StatusCode(413); // Payload Too Large
+                }
+
                 // Base64URL decoding (replace URL-safe characters)
                 var requestBytes = Convert.FromBase64String(
                     base64Request.Replace('_', '/').Replace('-', '+'));
@@ -114,12 +115,6 @@ public static class OcspEndpointExtensions
         })
         .WithName("OcspGet")
         .WithOpenApi();
-
-        // Apply caching if enabled
-        if (cachingEnabled)
-        {
-            getEndpoint.CacheOutput("ocsp");
-        }
 
         return endpoints;
     }

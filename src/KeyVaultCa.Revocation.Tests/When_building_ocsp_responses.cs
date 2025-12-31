@@ -1,5 +1,6 @@
 using System;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using FakeItEasy;
@@ -37,7 +38,7 @@ public class When_building_ocsp_responses : TestBase
             issuerCert,
             logger);
 
-        var ocspRequest = CreateOcspRequest("1234567890ABCDEF");
+        var ocspRequest = CreateOcspRequest("1234567890ABCDEF", issuerCert);
 
         // Act
         var responseBytes = await responseBuilder.BuildResponseAsync(ocspRequest, CancellationToken.None);
@@ -94,7 +95,7 @@ public class When_building_ocsp_responses : TestBase
             issuerCert,
             logger);
 
-        var ocspRequest = CreateOcspRequest(serialNumber);
+        var ocspRequest = CreateOcspRequest(serialNumber, issuerCert);
 
         // Act
         var responseBytes = await responseBuilder.BuildResponseAsync(ocspRequest, CancellationToken.None);
@@ -137,7 +138,7 @@ public class When_building_ocsp_responses : TestBase
             issuerCert,
             logger);
 
-        var ocspRequest = CreateOcspRequest("1234567890ABCDEF");
+        var ocspRequest = CreateOcspRequest("1234567890ABCDEF", issuerCert);
 
         // Act
         var responseBytes = await responseBuilder.BuildResponseAsync(ocspRequest, CancellationToken.None);
@@ -182,13 +183,21 @@ public class When_building_ocsp_responses : TestBase
     }
 
     // Helper methods to create OCSP requests
-    private static byte[] CreateOcspRequest(string serialNumberHex)
+    private static byte[] CreateOcspRequest(string serialNumberHex, X509Certificate2 issuerCert)
     {
         var serialNumber = new BigInteger(serialNumberHex, 16);
+
+        // Compute issuer name hash (SHA-1)
+        using var sha1 = SHA1.Create();
+        var issuerNameHash = sha1.ComputeHash(issuerCert.SubjectName.RawData);
+
+        // Compute issuer key hash (SHA-1)
+        var issuerKeyHash = sha1.ComputeHash(issuerCert.PublicKey.EncodedKeyValue.RawData);
+
         var certId = new CertID(
             new AlgorithmIdentifier(new DerObjectIdentifier("1.3.14.3.2.26")), // SHA-1
-            new DerOctetString(new byte[20]), // Fake issuer name hash
-            new DerOctetString(new byte[20]), // Fake issuer key hash
+            new DerOctetString(issuerNameHash), // Correct issuer name hash
+            new DerOctetString(issuerKeyHash),  // Correct issuer key hash
             new DerInteger(serialNumber));
 
         var request = new Request(certId, null);

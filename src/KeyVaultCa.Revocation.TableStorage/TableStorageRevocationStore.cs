@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Azure.Data.Tables;
@@ -11,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace KeyVaultCa.Revocation.TableStorage;
 
 /// <summary>
-/// Azure Table Storage implementation of IRevocationStore
+/// Azure Table Storage implementation of IRevocationStore.
 /// </summary>
 public class TableStorageRevocationStore : IRevocationStore
 {
@@ -70,7 +69,7 @@ public class TableStorageRevocationStore : IRevocationStore
         var serialUpper = serialNumber.ToUpperInvariant();
         var partitionKey = serialUpper.Length >= 2 ? serialUpper.Substring(0, 2) : serialUpper;
 
-        _logger.LogDebug("Looking up revocation for certificate {SerialNumber}", serialNumber);
+        _logger.LogDebug("Looking up revocation in Table Storage for certificate {SerialNumber}", serialNumber);
 
         try
         {
@@ -81,6 +80,7 @@ public class TableStorageRevocationStore : IRevocationStore
 
             var record = response.Value.ToRecord();
             _logger.LogDebug("Found revocation for certificate {SerialNumber}", serialNumber);
+
             return record;
         }
         catch (Azure.RequestFailedException ex) when (ex.Status == 404)

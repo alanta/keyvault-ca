@@ -3,9 +3,7 @@ using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Keys.Cryptography;
 using KeyVaultCa.Core;
-using KeyVaultCa.Revocation;
 using KeyVaultCa.Revocation.Interfaces;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -65,6 +63,22 @@ public static class OcspServiceCollectionExtensions
                 "Loaded OCSP signing certificate: {Subject}",
                 ocspSigningCert.Subject);
 
+            // Validate OCSP signing cert has id-kp-OCSPSigning EKU (RFC 6960 Section 4.2.2.2)
+            var ekuExtension = ocspSigningCert.Extensions
+                .OfType<X509EnhancedKeyUsageExtension>()
+                .FirstOrDefault();
+
+            if (ekuExtension == null || !ekuExtension.EnhancedKeyUsages
+                .Cast<System.Security.Cryptography.Oid>()
+                .Any(oid => oid.Value == "1.3.6.1.5.5.7.3.9")) // id-kp-OCSPSigning
+            {
+                throw new InvalidOperationException(
+                    $"OCSP signing certificate '{options.OcspSignerCertName}' must have " +
+                    "Extended Key Usage extension with id-kp-OCSPSigning (1.3.6.1.5.5.7.3.9)");
+            }
+
+            logger.LogInformation("Validated OCSP signing certificate has id-kp-OCSPSigning EKU");
+
             // Create signature generator for OCSP signing
             var ocspKeyUri = ocspCertResponse.Value.KeyId;
             var ocspCryptoClient = new CryptographyClient(ocspKeyUri, credential);
@@ -105,57 +119,6 @@ public static class OcspServiceCollectionExtensions
         // Add health check for fail-fast behavior
         services.AddHealthChecks()
             .AddCheck<OcspHealthCheck>("ocsp_ready");
-
-        // Configure OCSP-specific caching policy if enabled
-        // Note: Consumers must add their own output caching implementation
-        // (e.g., services.AddOutputCache() or services.AddStackExchangeRedisOutputCache())
-        if (options.EnableCaching)
-        {
-            // Default cache duration to response validity if not set
-            var cacheDuration = options.CacheDurationMinutes > 0
-                ? options.CacheDurationMinutes
-                : options.ResponseValidityMinutes;
-
-            // Validate cache duration doesn't exceed response validity
-            if (cacheDuration > options.ResponseValidityMinutes)
-            {
-                throw new InvalidOperationException(
-                    $"CacheDurationMinutes ({cacheDuration}) cannot exceed ResponseValidityMinutes ({options.ResponseValidityMinutes}). " +
-                    "Caching responses beyond their validity period would violate OCSP protocol.");
-            }
-
-            services.Configure<Microsoft.AspNetCore.OutputCaching.OutputCacheOptions>(cacheOptions =>
-            {
-                cacheOptions.AddPolicy("ocsp", builder =>
-                {
-                    builder
-                        .Expire(TimeSpan.FromMinutes(cacheDuration))
-                        .VaryByValue(context =>
-                        {
-                            // Cache key based on request body hash (contains serial number)
-                            // We need to read the body, hash it, and reset the position
-                            context.Request.EnableBuffering();
-
-                            using var reader = new StreamReader(
-                                context.Request.Body,
-                                encoding: System.Text.Encoding.UTF8,
-                                detectEncodingFromByteOrderMarks: false,
-                                leaveOpen: true);
-
-                            var body = reader.ReadToEndAsync().GetAwaiter().GetResult();
-                            context.Request.Body.Position = 0; // Reset for handler
-
-                            // Use SHA256 hash of request as cache key
-                            var bodyBytes = System.Text.Encoding.UTF8.GetBytes(body);
-                            var hash = System.Security.Cryptography.SHA256.HashData(bodyBytes);
-
-                            return new KeyValuePair<string, string>(
-                                "ocsp-request-hash",
-                                Convert.ToBase64String(hash));
-                        });
-                });
-            });
-        }
 
         return services;
     }

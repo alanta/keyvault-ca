@@ -71,7 +71,7 @@ That's it! Your OCSP responder is ready to handle certificate status requests.
 | Option | Description | Default |
 |--------|-------------|---------|
 | `KeyVaultUrl` | Azure Key Vault URL (required) | - |
-| `OcspSignerCertName` | Name of OCSP signing certificate in Key Vault | `ocsp-signer` |
+| `OcspSignerCertName` | Name of OCSP signing certificate in Key Vault (must have id-kp-OCSPSigning EKU) | `ocsp-signer` |
 | `IssuerCertName` | Name of CA certificate in Key Vault | `root-ca` |
 | `ResponseValidityMinutes` | How long OCSP responses are valid (thisUpdate to nextUpdate) | `10` |
 
@@ -149,137 +149,47 @@ This package is part of the KeyVaultCa toolkit:
 └─────────────────────────────────────────┘
 ```
 
-## Performance: Output Caching
+## Performance: Automatic Caching
 
-Enable response caching to dramatically improve performance by eliminating Table Storage lookups and Key Vault signing operations on cache hits.
+The revocation store implementation (e.g., `AddTableStorageRevocationStore`) automatically includes **HybridCache** for optimal performance with zero configuration required.
 
 ### Performance Impact
 
 - **Without cache**: ~100-300ms per request (Table Storage + Key Vault signing)
-- **With in-memory cache hit**: <1ms
-- **With Redis cache hit**: ~5ms
+- **With cache hit**: ~10-50ms (Key Vault signing only, Table Storage lookup cached)
+- **Cache TTL**: 10 minutes (automatic)
 
 ### How It Works
 
-This package configures an OCSP-specific cache policy when `EnableCaching` is true, but **does not add caching services**. You choose your own caching implementation based on your deployment needs:
+Caching is implemented using the **decorator pattern** at the revocation store level:
 
-- **In-memory**: Best for single-instance deployments, lowest latency
-- **Redis**: Best for multi-instance/load-balanced deployments, shared cache
+1. `TableStorageRevocationStore` handles Azure Table Storage operations
+2. `CachedRevocationStore` wraps it with HybridCache
+3. Certificate revocation lookups are cached by serial number
+4. **Stampede protection** prevents multiple concurrent requests from hitting Table Storage
 
-### Setup: In-Memory Cache (Single Instance)
+### Key Benefits
 
-**appsettings.json:**
-```json
-{
-  "OcspResponder": {
-    "EnableCaching": true
-    // CacheDurationMinutes defaults to ResponseValidityMinutes if not set
-  }
-}
-```
+✅ **Automatic**: No configuration needed, caching is enabled by default
+✅ **RFC 6960 compliant**: Each OCSP response is freshly signed (no response caching)
+✅ **Stampede protection**: HybridCache prevents cache stampedes under high load
+✅ **Cache invalidation**: Automatic when certificates are revoked
 
-**Program.cs:**
-```csharp
-using KeyVaultCa.Revocation.Ocsp.Hosting;
-using KeyVaultCa.Revocation.TableStorage;
+### Cache Behavior
 
-var builder = WebApplication.CreateBuilder(args);
+**Cached**:
+- Certificate revocation status lookups (by serial number)
+- Both "revoked" and "not revoked" states
 
-// Add in-memory output caching
-builder.Services.AddOutputCache();
+**Not Cached**:
+- OCSP response signing (each response is unique with nonce + timestamps)
+- Certificate issuer validation
 
-// Add OCSP responder (configures the "ocsp" cache policy)
-builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
-builder.Services.AddTableStorageRevocationStore(
-    builder.Configuration.GetConnectionString("tables")!);
+**Cache Invalidation**:
+- When a certificate is revoked via `IRevocationStore.AddRevocationAsync()`
+- Automatic TTL expiration after 10 minutes
 
-var app = builder.Build();
-
-// Enable output cache middleware
-app.UseOutputCache();
-
-app.MapOcspResponder();
-await app.RunAsync();
-```
-
-### Setup: Distributed Cache (Redis - Multi-Instance)
-
-**Install Redis package:**
-```bash
-dotnet add package Microsoft.AspNetCore.OutputCaching.StackExchangeRedis
-```
-
-**appsettings.json:**
-```json
-{
-  "OcspResponder": {
-    "EnableCaching": true
-    // CacheDurationMinutes defaults to ResponseValidityMinutes if not set
-  },
-  "ConnectionStrings": {
-    "redis": "localhost:6379"
-  }
-}
-```
-
-**Program.cs:**
-```csharp
-using KeyVaultCa.Revocation.Ocsp.Hosting;
-using KeyVaultCa.Revocation.TableStorage;
-
-var builder = WebApplication.CreateBuilder(args);
-
-// Add Redis distributed output caching
-builder.Services.AddStackExchangeRedisOutputCache(options =>
-{
-    options.Configuration = builder.Configuration.GetConnectionString("redis");
-});
-
-// Add OCSP responder (configures the "ocsp" cache policy)
-builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
-builder.Services.AddTableStorageRevocationStore(
-    builder.Configuration.GetConnectionString("tables")!);
-
-var app = builder.Build();
-
-// Enable output cache middleware
-app.UseOutputCache();
-
-app.MapOcspResponder();
-await app.RunAsync();
-```
-
-### Cache Invalidation Considerations
-
-When a certificate is revoked, cached "good" responses will persist until the TTL expires.
-
-**Default Behavior:**
-- By default, `CacheDurationMinutes` equals `ResponseValidityMinutes`, so cached responses expire exactly when the OCSP response itself expires
-- This maximizes cache effectiveness while maintaining OCSP protocol correctness
-
-**Alternative Strategies:**
-
-1. **Short TTL**: Set `CacheDurationMinutes` to 5-10 minutes (less than `ResponseValidityMinutes`)
-   - Faster revocation propagation
-   - Good for high-security environments
-   - Reduces cache effectiveness
-
-2. **Manual Invalidation**: Implement cache eviction on revocation events
-   - Requires custom code using `IOutputCacheStore`
-   - Best freshness guarantee
-   - More complex to implement
-
-### Cache Configuration Options
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `EnableCaching` | Enable OCSP cache policy | `false` (opt-in) |
-| `CacheDurationMinutes` | How long to cache responses (must be ≤ ResponseValidityMinutes) | `0` (uses ResponseValidityMinutes) |
-
-**Notes**:
-- The caching implementation (in-memory vs Redis) is controlled by which `AddOutputCache*()` method you call, not by configuration
-- If `CacheDurationMinutes` is not set or is 0, it defaults to `ResponseValidityMinutes` to match OCSP response validity
-- Setting `CacheDurationMinutes` higher than `ResponseValidityMinutes` will throw an exception at startup
+This approach balances performance with RFC 6960 requirements for fresh signatures and nonce handling.
 
 ## Troubleshooting
 
