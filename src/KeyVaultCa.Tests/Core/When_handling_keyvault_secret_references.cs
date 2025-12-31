@@ -1,4 +1,4 @@
-using FluentAssertions;
+using Shouldly;
 using KeyVaultCa.Core;
 
 namespace KeyVaultCA.Tests.Core;
@@ -14,9 +14,9 @@ public class When_handling_keyvault_secret_references
         // Arrange & Act
         var result = KeyVaultSecretReference.TryParse(input, out var reference);
         // Assert
-        result.Should().BeTrue();
-        reference!.KeyVaultUrl.Should().Be(expectedVault);
-        reference.SecretName.Should().Be(expectedSecret);
+        result.ShouldBeTrue();
+        reference!.KeyVaultUrl.ToString().TrimEnd('/').ShouldBe(expectedVault);
+        reference.SecretName.ShouldBe(expectedSecret);
     }
     
     [Theory]
@@ -29,7 +29,7 @@ public class When_handling_keyvault_secret_references
         // Arrange & Act
         var result = KeyVaultSecretReference.TryParse(input!, out var reference);
         // Assert
-        result.Should().BeFalse();
-        reference.Should().BeNull();
+        result.ShouldBeFalse();
+        reference.ShouldBeNull();
     }
 }

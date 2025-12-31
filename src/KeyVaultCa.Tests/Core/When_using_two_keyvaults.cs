@@ -1,6 +1,6 @@
 using System.Security.Cryptography.X509Certificates;
 using Azure.Security.KeyVault.Certificates;
-using FluentAssertions;
+using Shouldly;
 using KeyVaultCa.Core;
 using KeyVaultCA.Tests.KeyVault;
 using KeyVaultCA.Tests.Tools;
@@ -46,14 +46,14 @@ public class When_using_two_keyvaults(ITestOutputHelper output)
         
         // Assert
         var issuedCert = kv2.GetCertificateByName("UnitTestCert");
-        issuedCert.Should().NotBeNull("the issued certificate should exist in the second Key Vault");
+        issuedCert.ShouldNotBeNull("the issued certificate should exist in the second Key Vault");
 
         var caCert = kv1.GetCertificateByName("UnitTestCA");
-        caCert.Should().NotBeNull("the CA certificate should exist in the first Key Vault");
+        caCert.ShouldNotBeNull("the CA certificate should exist in the first Key Vault");
 
         var issuedX509 = X509CertificateLoader.LoadCertificate(issuedCert!.Cer);
         var caX509 = X509CertificateLoader.LoadCertificate(caCert!.Cer);
 
-        issuedX509.Issuer.Should().Be(caX509.Subject, "the leaf certificate should be issued by the CA stored in the other Key Vault");
+        issuedX509.Issuer.ShouldBe(caX509.Subject, "the leaf certificate should be issued by the CA stored in the other Key Vault");
     }
 }

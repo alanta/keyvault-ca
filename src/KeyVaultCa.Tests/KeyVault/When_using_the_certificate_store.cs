@@ -1,7 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Azure.Security.KeyVault.Certificates;
-using FluentAssertions;
+using Shouldly;
 
 namespace KeyVaultCA.Tests.KeyVault;
 
@@ -23,8 +23,8 @@ public class When_using_the_certificate_store
 
         // Assert
         var operation2 = certStore.GetCertificateOperationById(operation.Id);
-        operation2.Should().NotBeNull();
-        operation2!.HasCompleted.Should().BeFalse();
+        operation2.ShouldNotBeNull();
+        operation2!.HasCompleted.ShouldBeFalse();
     }
 
     [Fact]
@@ -44,8 +44,8 @@ public class When_using_the_certificate_store
 
         // Assert
         var operation2 = certStore.GetCertificateOperationById(operation.Id);
-        operation2.Should().NotBeNull();
-        operation2!.HasCompleted.Should().BeTrue();
-        operation2.Value.Cer.Should().BeEquivalentTo(cert.RawData);
+        operation2.ShouldNotBeNull();
+        operation2!.HasCompleted.ShouldBeTrue();
+        operation2.Value.Cer.ShouldBe(cert.RawData);
     }
 }

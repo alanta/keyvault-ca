@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
+using Shouldly;
 using KeyVaultCa.Core;
 
 namespace KeyVaultCA.Tests.Core;
@@ -27,9 +27,9 @@ public class When_merging_extensions
 
         // Assert
         var basicConstraints = request.OfType<X509BasicConstraintsExtension>().Single();
-        basicConstraints.CertificateAuthority.Should().BeTrue();
-        basicConstraints.HasPathLengthConstraint.Should().BeTrue();
-        basicConstraints.PathLengthConstraint.Should().Be(1);
+        basicConstraints.CertificateAuthority.ShouldBeTrue();
+        basicConstraints.HasPathLengthConstraint.ShouldBeTrue();
+        basicConstraints.PathLengthConstraint.ShouldBe(1);
     }
     
     [Fact]
@@ -51,7 +51,7 @@ public class When_merging_extensions
 
         // Assert
         var keyUsage = request.OfType<X509KeyUsageExtension>().Single();
-        keyUsage.KeyUsages.Should().Be(X509KeyUsageFlags.CrlSign);
+        keyUsage.KeyUsages.ShouldBe(X509KeyUsageFlags.CrlSign);
     }
     
     [Fact]
@@ -78,11 +78,11 @@ public class When_merging_extensions
         CertificateFactory.MergeExtensions(request, overrideExtensions);
 
         // Assert
-        request.Should().HaveCount(2);
+        request.Count.ShouldBe(2);
         var subjectAlternativeName = request.OfType<X509SubjectAlternativeNameExtension>().Single();
-        subjectAlternativeName.EnumerateDnsNames().Should().Contain("test2.alanta.local");
+        subjectAlternativeName.EnumerateDnsNames().ShouldContain("test2.alanta.local");
 
-        var basicConstraints = request.OfType<X509BasicConstraintsExtension>().FirstOrDefault()
-            .Should().NotBeNull("Basic constraints should be preserved");
+        var basicConstraints = request.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
+        basicConstraints.ShouldNotBeNull("Basic constraints should be preserved");
     }
 }

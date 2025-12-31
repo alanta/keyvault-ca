@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using Azure.Identity;
-using FluentAssertions;
+using Shouldly;
 using KeyVaultCa.Core;
 using KeyVaultCA.Tests.Tools;
 using Microsoft.Extensions.Logging;
@@ -64,7 +64,7 @@ namespace KeyVaultCA.Tests
                 uri => new CertificateClient(uri, credential),
                 uri => new CryptographyClient(uri, credential));
 
-            cert.Should().NotBeNull();
+            cert.ShouldNotBeNull();
 
             output.WriteLine(cert.ExportCertificatePem());
 
@@ -75,7 +75,7 @@ namespace KeyVaultCA.Tests
             builder.Build(true);
 
             var alternativeDNSNames = cert.Extensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(x => x.EnumerateDnsNames()).ToArray();
-            alternativeDNSNames.Should().Contain("test.alanta.local");
+            alternativeDNSNames.ShouldContain("test.alanta.local");
 
             /*var credential = new DefaultAzureCredential();
             var csrKeyVault = new CertificateClient(pendingCertificateIdentifier.VaultUri, credential);
@@ -104,31 +104,31 @@ namespace KeyVaultCA.Tests
 
             // TODO : build chain
 
-            cert.Should().NotBeNull();
+            cert.ShouldNotBeNull();
 
             output.WriteLine(cert.ExportCertificatePem());
 
-            cert.NotAfter.Should().BeBefore(DateTime.Now.AddDays(30));
+            cert.NotAfter.ShouldBeLessThan(DateTime.Now.AddDays(30));
             var basicConstraints = cert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
-            basicConstraints!.CertificateAuthority.Should().BeFalse();
-            basicConstraints.HasPathLengthConstraint.Should().BeFalse();
+            basicConstraints!.CertificateAuthority.ShouldBeFalse();
+            basicConstraints.HasPathLengthConstraint.ShouldBeFalse();
 
             var alternativeDnsNames = cert.Extensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(x => x.EnumerateDnsNames()).ToArray();
-            alternativeDnsNames.Should().Contain("test.alanta.local");
+            alternativeDnsNames.ShouldContain("test.alanta.local");
 
             var keyUsage = cert.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
-            keyUsage!.KeyUsages.Should().Be(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment);
+            keyUsage!.KeyUsages.ShouldBe(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment);
         }
 
         [Fact]
         public async Task VerifyCSR()
         {
             var req = CertificateRequest.LoadSigningRequest(Convert.FromBase64String(csr), HashAlgorithmName.SHA256, CertificateRequestLoadOptions.UnsafeLoadCertificateExtensions, RSASignaturePadding.Pkcs1);
-            req.CertificateExtensions.Should().NotBeEmpty();
+            req.CertificateExtensions.ShouldNotBeEmpty();
 
-            req.CertificateExtensions.OfType<X509SubjectAlternativeNameExtension>().Should().NotBeEmpty();
+            req.CertificateExtensions.OfType<X509SubjectAlternativeNameExtension>().ShouldNotBeEmpty();
             var alternativeDnsNames = req.CertificateExtensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(x => x.EnumerateDnsNames()).ToArray();
-            alternativeDnsNames.Should().Contain("test.alanta.local");
+            alternativeDnsNames.ShouldContain("test.alanta.local");
 
 
             //var request = new Pkcs10CertificationRequestDelaySigned(Convert.FromBase64String(csr)); 

@@ -2,7 +2,7 @@
 using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Keys.Cryptography;
 using FakeItEasy;
-using FluentAssertions;
+using Shouldly;
 using KeyVaultCa.Core;
 using KeyVaultCA.Tests.KeyVault;
 using KeyVaultCA.Tests.Tools;
@@ -29,11 +29,11 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         // Assert
         var certificate = store.GetCertificateByName("UnitTestCA");
         var certBytes = certificate!.Cer;
-        certBytes.Should().NotBeNull();
+        certBytes.ShouldNotBeNull();
         var cert = X509CertificateLoader.LoadCertificate(certBytes);
-        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.Should().BeTrue();
+        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.ShouldBeTrue();
 
-        store.CertificateVersions[1].Policy.ReuseKey.Should().BeTrue("CA root should reuse the key created for it in the first version.");
+        store.CertificateVersions[1].Policy.ReuseKey!.Value.ShouldBeTrue("CA root should reuse the key created for it in the first version.");
     }
 
     [Fact]
@@ -75,12 +75,12 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         // Assert
         var certificate = certificateOperations.GetCertificateByName("UnitTestIntermediate");
         var certBytes = certificate!.Cer;
-        certBytes.Should().NotBeNull();
+        certBytes.ShouldNotBeNull();
         var cert = X509CertificateLoader.LoadCertificate(certBytes);
-        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.Should().BeTrue("Intermediate certificate should be a CA certificate");
-        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().HasPathLengthConstraint.Should().BeTrue("Intermediate certificate should have a path length constraint");
-        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().PathLengthConstraint.Should().Be(0, "Intermediate certificate should have a path length constraint of 0");
-        cert.Extensions.OfType<X509SubjectKeyIdentifierExtension>().FirstOrDefault().Should().NotBeNull("Intermediate certificate should have a subject key identifier");
+        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().CertificateAuthority.ShouldBeTrue("Intermediate certificate should be a CA certificate");
+        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().HasPathLengthConstraint.ShouldBeTrue("Intermediate certificate should have a path length constraint");
+        cert.Extensions.OfType<X509BasicConstraintsExtension>().Single().PathLengthConstraint.ShouldBe(0, "Intermediate certificate should have a path length constraint of 0");
+        cert.Extensions.OfType<X509SubjectKeyIdentifierExtension>().FirstOrDefault().ShouldNotBeNull("Intermediate certificate should have a subject key identifier");
     }
 
     [Fact]
@@ -138,17 +138,17 @@ public class When_signing_a_certificate_with_keyvault(ITestOutputHelper output)
         // Assert
         var certificate = certificateOperations.GetCertificateByName("LeafWithSAN");
         var certBytes = certificate!.Cer;
-        certBytes.Should().NotBeNull();
+        certBytes.ShouldNotBeNull();
         var cert = X509CertificateLoader.LoadCertificate(certBytes);
-        cert.NotAfter.Should().BeBefore(DateTime.Now.AddDays(30));
+        cert.NotAfter.ShouldBeLessThan(DateTime.Now.AddDays(30));
         var basicConstraints = cert.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
-        basicConstraints!.CertificateAuthority.Should().BeFalse();
-        basicConstraints.HasPathLengthConstraint.Should().BeFalse();
+        basicConstraints!.CertificateAuthority.ShouldBeFalse();
+        basicConstraints.HasPathLengthConstraint.ShouldBeFalse();
 
         var alternativeDnsNames = cert.Extensions.OfType<X509SubjectAlternativeNameExtension>().SelectMany(x => x.EnumerateDnsNames()).ToArray();
-        alternativeDnsNames.Should().Contain("test.alanta.local");
+        alternativeDnsNames.ShouldContain("test.alanta.local");
 
         var keyUsage = cert.Extensions.OfType<X509KeyUsageExtension>().FirstOrDefault();
-        keyUsage!.KeyUsages.Should().Be(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment);
+        keyUsage!.KeyUsages.ShouldBe(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyEncipherment);
     }
 }
