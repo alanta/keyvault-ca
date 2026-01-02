@@ -39,64 +39,70 @@ public static class OcspServiceCollectionExtensions
 
         // Register configuration as singleton
         services.AddSingleton(options);
+        
+        var credential = new DefaultAzureCredential();
+        var certClient = new CertificateClient(new Uri(options.KeyVaultUrl), credential);
+        X509Certificate2 ocspSigningCert;
+        X509Certificate2 issuerCert;
+        Uri ocspSigningCertKeyUri;
+        
+        // Load OCSP signing certificate
+        try
+        {
+            var ocspCertResponse = certClient
+                .GetCertificateAsync(options.OcspSignerCertName)
+                .GetAwaiter().GetResult();
+            ocspSigningCert = X509CertificateLoader
+                .LoadCertificate(ocspCertResponse.Value.Cer.ToArray());
+            ocspSigningCertKeyUri = ocspCertResponse.Value.KeyId;
+            Console.WriteLine("OCSP signing certificate loaded.");
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException("Failed to load signing certificate from KeyVault", exception);
+        }
 
+        // Validate OCSP signing cert has id-kp-OCSPSigning EKU (RFC 6960 Section 4.2.2.2)
+        var ekuExtension = ocspSigningCert.Extensions
+            .OfType<X509EnhancedKeyUsageExtension>()
+            .FirstOrDefault();
+
+        if (ekuExtension == null || !ekuExtension.EnhancedKeyUsages
+                .Cast<System.Security.Cryptography.Oid>()
+                .Any(oid => oid.Value == "1.3.6.1.5.5.7.3.9")) // id-kp-OCSPSigning
+        {
+            throw new InvalidOperationException(
+                $"OCSP signing certificate '{options.OcspSignerCertName}' must have " +
+                "Extended Key Usage extension with id-kp-OCSPSigning (1.3.6.1.5.5.7.3.9)");
+        }
+
+        try
+        {
+            // Load issuer certificate (root CA)
+            var issuerCertResponse = certClient
+                .GetCertificateAsync(options.IssuerCertName)
+                .GetAwaiter().GetResult();
+            issuerCert = X509CertificateLoader
+                .LoadCertificate(issuerCertResponse.Value.Cer);
+            Console.WriteLine("Issuer certificate loaded.");
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException("Failed to load issuer certificate from KeyVault", exception);
+        }
+        
         // Register OCSP response builder as singleton for performance
         // This loads certificates from Key Vault at startup (fail-fast if unreachable)
         services.AddSingleton(sp =>
         {
             var logger = sp.GetRequiredService<ILogger<OcspResponseBuilder>>();
-            var credential = new DefaultAzureCredential();
-            var certClient = new CertificateClient(new Uri(options.KeyVaultUrl), credential);
-
-            logger.LogInformation(
-                "Loading OCSP certificates from Key Vault: {KeyVaultUrl}",
-                options.KeyVaultUrl);
-
-            // Load OCSP signing certificate
-            var ocspCertResponse = certClient
-                .GetCertificateAsync(options.OcspSignerCertName)
-                .GetAwaiter().GetResult();
-            var ocspSigningCert = X509CertificateLoader
-                .LoadCertificate(ocspCertResponse.Value.Cer.ToArray());
-
-            logger.LogInformation(
-                "Loaded OCSP signing certificate: {Subject}",
-                ocspSigningCert.Subject);
-
-            // Validate OCSP signing cert has id-kp-OCSPSigning EKU (RFC 6960 Section 4.2.2.2)
-            var ekuExtension = ocspSigningCert.Extensions
-                .OfType<X509EnhancedKeyUsageExtension>()
-                .FirstOrDefault();
-
-            if (ekuExtension == null || !ekuExtension.EnhancedKeyUsages
-                .Cast<System.Security.Cryptography.Oid>()
-                .Any(oid => oid.Value == "1.3.6.1.5.5.7.3.9")) // id-kp-OCSPSigning
-            {
-                throw new InvalidOperationException(
-                    $"OCSP signing certificate '{options.OcspSignerCertName}' must have " +
-                    "Extended Key Usage extension with id-kp-OCSPSigning (1.3.6.1.5.5.7.3.9)");
-            }
-
-            logger.LogInformation("Validated OCSP signing certificate has id-kp-OCSPSigning EKU");
 
             // Create signature generator for OCSP signing
-            var ocspKeyUri = ocspCertResponse.Value.KeyId;
-            var ocspCryptoClient = new CryptographyClient(ocspKeyUri, credential);
+            var ocspCryptoClient = new CryptographyClient(ocspSigningCertKeyUri, credential);
             var signatureGenerator = new KeyVaultSignatureGenerator(
                 _ => ocspCryptoClient,
-                ocspKeyUri,
+                ocspSigningCertKeyUri,
                 ocspSigningCert.SignatureAlgorithm);
-
-            // Load issuer certificate (root CA)
-            var issuerCertResponse = certClient
-                .GetCertificateAsync(options.IssuerCertName)
-                .GetAwaiter().GetResult();
-            var issuerCert = X509CertificateLoader
-                .LoadCertificate(issuerCertResponse.Value.Cer.ToArray());
-
-            logger.LogInformation(
-                "Loaded issuer certificate: {Subject}",
-                issuerCert.Subject);
 
             // Create OCSP response builder
             var revocationStore = sp.GetRequiredService<IRevocationStore>();
@@ -108,17 +114,15 @@ public static class OcspServiceCollectionExtensions
                 logger,
                 TimeSpan.FromMinutes(options.ResponseValidityMinutes));
 
-            // Mark health check as initialized
-            OcspHealthCheck.MarkInitialized();
-
-            logger.LogInformation("OCSP responder initialized successfully");
-
             return responseBuilder;
         });
 
         // Add health check for fail-fast behavior
         services.AddHealthChecks()
             .AddCheck<OcspHealthCheck>("ocsp_ready");
+
+        // Mark health check as initialized
+        OcspHealthCheck.MarkInitialized();
 
         return services;
     }
