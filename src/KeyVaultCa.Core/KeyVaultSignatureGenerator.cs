@@ -25,7 +25,7 @@ namespace KeyVaultCa.Core
 
             public override bool VerifyHash(byte[] hash, byte[] signature)
             {
-                throw new NotImplementedException();
+                throw new NotImplementedException("This method is not implemented as it is not required for KeyVault-based signature generation.");
             }
         }
 
@@ -55,7 +55,7 @@ namespace KeyVaultCa.Core
 
         protected override PublicKey BuildPublicKey()
         {
-            throw new NotImplementedException();
+            throw new NotImplementedException("BuildPublicKey is not required for KeyVault-based signature generation.");
         }
 
         public override byte[] GetSignatureAlgorithmIdentifier(HashAlgorithmName hashAlgorithm)
