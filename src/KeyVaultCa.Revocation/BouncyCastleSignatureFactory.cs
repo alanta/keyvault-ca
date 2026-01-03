@@ -51,9 +51,9 @@ public class BouncyCastleSignatureFactory : ISignatureFactory
         {
             return hashAlgorithm.Name switch
             {
-                "SHA256" => "1.2.840.10045.4.3.2", // ecdsa-with-SHA256
-                "SHA384" => "1.2.840.10045.4.3.3", // ecdsa-with-SHA384
-                "SHA512" => "1.2.840.10045.4.3.4", // ecdsa-with-SHA512
+                "SHA256" => WellKnownOids.SignatureAlgorithms.ECDsaWithSha256,
+                "SHA384" => WellKnownOids.SignatureAlgorithms.ECDsaWithSha384,
+                "SHA512" => WellKnownOids.SignatureAlgorithms.ECDsaWithSha512,
                 _ => throw new ArgumentException($"Unsupported hash algorithm: {hashAlgorithm.Name}")
             };
         }
@@ -61,9 +61,9 @@ public class BouncyCastleSignatureFactory : ISignatureFactory
         {
             return hashAlgorithm.Name switch
             {
-                "SHA256" => "1.2.840.113549.1.1.11", // sha256WithRSAEncryption
-                "SHA384" => "1.2.840.113549.1.1.12", // sha384WithRSAEncryption
-                "SHA512" => "1.2.840.113549.1.1.13", // sha512WithRSAEncryption
+                "SHA256" => WellKnownOids.SignatureAlgorithms.Sha256WithRSAEncryption,
+                "SHA384" => WellKnownOids.SignatureAlgorithms.Sha384WithRSAEncryption,
+                "SHA512" => WellKnownOids.SignatureAlgorithms.Sha512WithRSAEncryption,
                 _ => throw new ArgumentException($"Unsupported hash algorithm: {hashAlgorithm.Name}")
             };
         }

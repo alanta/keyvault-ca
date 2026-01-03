@@ -41,4 +41,42 @@ public static class WellKnownOids
         /// </summary>
         public const string CaIssuers = "1.3.6.1.5.5.7.48.2";
     }
+
+    /// <summary>
+    /// Signature algorithm OIDs for PKCS#1 (RSA) and ANSI X9.62 (ECDSA)
+    /// </summary>
+    public static class SignatureAlgorithms
+    {
+        // PKCS #1 - RSA signature algorithms (source: https://oidref.com/1.2.840.113549.1.1)
+        /// <summary>
+        /// sha256WithRSAEncryption - PKCS #1
+        /// </summary>
+        public const string Sha256WithRSAEncryption = "1.2.840.113549.1.1.11";
+        
+        /// <summary>
+        /// sha384WithRSAEncryption - PKCS #1
+        /// </summary>
+        public const string Sha384WithRSAEncryption = "1.2.840.113549.1.1.12";
+        
+        /// <summary>
+        /// sha512WithRSAEncryption - PKCS #1
+        /// </summary>
+        public const string Sha512WithRSAEncryption = "1.2.840.113549.1.1.13";
+
+        // ANSI X9.62 - ECDSA signature algorithms (source: https://oidref.com/1.2.840.10045.4.3)
+        /// <summary>
+        /// ecdsa-with-SHA256 - ANSI X9.62
+        /// </summary>
+        public const string ECDsaWithSha256 = "1.2.840.10045.4.3.2";
+        
+        /// <summary>
+        /// ecdsa-with-SHA384 - ANSI X9.62
+        /// </summary>
+        public const string ECDsaWithSha384 = "1.2.840.10045.4.3.3";
+        
+        /// <summary>
+        /// ecdsa-with-SHA512 - ANSI X9.62
+        /// </summary>
+        public const string ECDsaWithSha512 = "1.2.840.10045.4.3.4";
+    }
 }
