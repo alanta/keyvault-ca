@@ -1,21 +1,81 @@
-MIT License
+Elastic License 2.0 (ELv2)
 
-Copyright (c) 2025 Alanta
+Copyright (c) 2025 Alanta / Marnix van Valen
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This Elastic License 2.0 (“License”) applies to the work (as defined below) made
+available by Alanta / Marnix van Valen (the “Licensor”). By using, copying, modifying,
+or distributing the Work, you agree to the terms of this License.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Definitions.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+“Work” means the software and related materials made available under this License.
+
+“Licensor” means the copyright holder(s) or entity(ies) offering the Work under
+this License.
+
+“You” means the individual or entity exercising permissions granted by this
+License.
+
+“Managed Service” means a commercial offering that allows third parties (other
+than Your employees and contractors) to access the functionality of the Work
+remotely.
+
+2. Grant of Rights.
+
+Subject to the terms and conditions of this License, the Licensor grants You a
+non-exclusive, non-transferable, non-sublicensable, royalty-free, worldwide
+license to use, copy, create derivative works of, and redistribute the Work,
+provided that:
+
+(a) You do not provide the Work to third parties as a Managed Service;
+
+(b) If You redistribute the Work or derivative works, You must include this
+License with them; and
+
+(c) You may not remove or obscure any licensing, copyright, or other notices
+contained in the Work.
+
+3. Limitations.
+
+You may not:
+
+(a) Provide the Work to third parties as a Managed Service;
+
+(b) Circumvent or attempt to circumvent the restrictions in this License;
+
+(c) Remove or alter any license key functionality if present.
+
+4. Termination.
+
+If You violate this License, Your rights under it terminate automatically. Upon
+termination, You must cease all use, copying, modification, and distribution of
+the Work.
+
+5. Disclaimer of Warranty.
+
+THE WORK IS PROVIDED “AS IS” WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, OR NON-INFRINGEMENT.
+
+6. Limitation of Liability.
+
+IN NO EVENT WILL THE LICENSOR BE LIABLE FOR ANY DAMAGES, INCLUDING BUT NOT
+LIMITED TO DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES,
+ARISING OUT OF THE USE OR INABILITY TO USE THE WORK.
+
+7. Trademarks.
+
+This License does not grant permission to use the trade names, trademarks,
+service marks, or product names of the Licensor, except as required for
+reasonable and customary use in describing the origin of the Work.
+
+8. Severability.
+
+If any provision of this License is held to be unenforceable, that provision
+shall be reformed only to the extent necessary to make it enforceable.
+
+9. Governing Law.
+
+This License shall be governed by and construed in accordance with the laws of
+the jurisdiction in which the Licensor is located, excluding its conflict of
+law principles.
