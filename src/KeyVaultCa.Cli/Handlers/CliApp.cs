@@ -18,6 +18,7 @@ public class CliApp
         app.Command("issue-intermediate-cert", IssueIntermediateCert.Configure);
         app.Command("issue-cert", IssueCert.Configure);
         app.Command("download-cert", DownloadCert.Configure);
+        app.Command("backfill-serial-tags", BackfillSerialTags.Configure);
         app.Command("revoke-cert", RevokeCert.Configure);
         app.Command("generate-crl", GenerateCrl.Configure);
         app.OnExecute(() =>

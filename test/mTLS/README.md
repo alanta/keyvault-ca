@@ -20,16 +20,15 @@ This test demonstrates two .NET applications communicating using mutual TLS (mTL
 └──────────────────────────────────────────────────────┘
                         │
                         │ Lookup revocation status
+                        │ (Key Vault certificate tags)
                         ▼
                 ┌───────────────┐
-                │ Azure Table   │
-                │ Storage       │
-                │ (Azurite)     │
+                │ Azure Key     │
+                │ Vault         │
                 └───────────────┘
 
 All orchestrated by .NET Aspire AppHost with:
 - Automatic service startup and health monitoring
-- Azurite container for Table Storage
 - Service discovery between apps
 - Aspire Dashboard for observability
 ```
@@ -38,7 +37,6 @@ All orchestrated by .NET Aspire AppHost with:
 
 - **.NET 8.0 SDK** installed
 - **.NET Aspire workload** - Install with: `dotnet workload install aspire`
-- **Docker Desktop** - Required for Aspire to run Azurite container
 - **Azure Key Vault** - An existing Azure Key Vault (development/test vault)
 - **Azure CLI** or authenticated with `DefaultAzureCredential`
 - **PowerShell Core** (for setup script) - Works on Windows, macOS, and Linux
@@ -46,12 +44,11 @@ All orchestrated by .NET Aspire AppHost with:
 
 ## Infrastructure Components
 
-1. **Azure Key Vault (Real)** - Stores CA certificate and private keys
-2. **Azurite (Aspire Container)** - Stores certificate revocation records in Table Storage
-3. **OCSP Responder** - ASP.NET Core minimal API responding to OCSP requests at `http://ocsp.localhost:5000`
-4. **API Server** - Sample WebAPI secured with mTLS (server + client certificates)
-5. **Client App** - Console app calling the API with client certificate
-6. **Aspire AppHost** - Orchestrates all services with health monitoring and dashboard
+1. **Azure Key Vault (Real)** - Stores CA certificate, private keys, and revocation data (as certificate tags)
+2. **OCSP Responder** - ASP.NET Core minimal API responding to OCSP requests at `http://ocsp.localhost:5000`
+3. **API Server** - Sample WebAPI secured with mTLS (server + client certificates)
+4. **Client App** - Console app calling the API with client certificate
+5. **Aspire AppHost** - Orchestrates all services with health monitoring and dashboard
 
 ## Certificate Hierarchy
 
@@ -157,7 +154,6 @@ dotnet run
 ```
 
 Aspire will:
-- ✅ Start Azurite container for Table Storage
 - ✅ Start OCSP Responder on `http://localhost:5000`
 - ✅ Start API Server with mTLS enabled
 - ✅ Start Client App (runs 3 requests with 10-second intervals to demonstrate OCSP caching)
@@ -226,9 +222,8 @@ The client runs 3 times to demonstrate OCSP response caching - only the first ru
 ### Aspire Won't Start
 
 If Aspire fails to start:
-1. Ensure Docker Desktop is running (required for Azurite container)
-2. Install Aspire workload: `dotnet workload install aspire`
-3. Check port 15888 is not in use (Aspire Dashboard)
+1. Install Aspire workload: `dotnet workload install aspire`
+2. Check port 15888 is not in use (Aspire Dashboard)
 
 ### Key Vault Access Denied
 
@@ -266,22 +261,13 @@ If client certificate OCSP validation doesn't work but shows no errors:
 3. **Check OCSP responder logs**: Look for incoming requests in the Aspire Dashboard
 4. **Verify root CA is in system trust store**: Run `scripts/manage-trust-store.sh install`
 
-### Azurite Container Issues
-
-If Azurite has connection issues:
-1. Check Azurite container is running in Aspire Dashboard
-2. Verify Table Storage health endpoint
-3. Restart Aspire if needed
-
 ## Testing Revocation (Optional - Future Enhancement)
 
 To test the revocation scenario, you would:
 
-1. Revoke a certificate using the CLI
+1. Revoke a certificate using the CLI: `kv-ca-cli revoke-cert -kv https://your-vault.vault.azure.net -s <serial-number>`
 2. The OCSP responder would return "revoked" status
 3. Certificate validation would fail
-
-This requires implementing the revoke-cert CLI command with Table Storage support.
 
 ## Clean Up
 
@@ -300,8 +286,6 @@ az keyvault certificate delete --vault-name your-keyvault-name --name api-server
 az keyvault certificate delete --vault-name your-keyvault-name --name api-client
 ```
 
-Aspire automatically cleans up Docker containers (Azurite) when stopped.
-
 ## File Structure
 
 ```
@@ -315,7 +299,7 @@ test/mTLS/
 │   └── ServiceDefaults.csproj          # Service defaults project
 ├── OcspResponder/                      # OCSP Responder Service
 │   ├── Program.cs                      # Minimal API OCSP endpoints
-│   ├── appsettings.json                # Key Vault & Table Storage config
+│   ├── appsettings.json                # Key Vault config
 │   └── OcspResponder.csproj            # Project file
 ├── ApiServer/                          # API Server with mTLS
 │   ├── Program.cs                      # mTLS configuration & WeatherForecast endpoint
@@ -344,7 +328,7 @@ test/mTLS/
 - **OCSP Validation**: Automatic revocation checking via .NET's TLS stack
 - **OCSP Caching**: Client runs 3 requests to demonstrate response caching (only first triggers OCSP)
 - **BouncyCastle Integration**: OCSP response generation using BouncyCastle
-- **Azure Integration**: Key Vault for certificate storage, Table Storage for revocation data
+- **Azure Integration**: Key Vault for certificate storage and revocation data (via certificate tags)
 - **.NET Aspire**: Modern cloud-native orchestration with observability
 
 ## Notes

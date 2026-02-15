@@ -18,12 +18,15 @@ This package contains the core OCSP logic without any hosting or storage depende
 
 ```
 KeyVaultCa.Revocation
-├── OcspResponseBuilder.cs      # RFC 6960 OCSP response builder
-├── CachedRevocationStore.cs    # HybridCache decorator for IRevocationStore
+├── OcspResponseBuilder.cs          # RFC 6960 OCSP response builder
+├── CrlGenerator.cs                 # X.509 CRL generation
+├── BouncyCastleSignatureFactory.cs # BouncyCastle ↔ Key Vault signing adapter
+├── CachedRevocationStore.cs        # HybridCache decorator for IRevocationStore
 ├── Interfaces/
-│   └── IRevocationStore.cs     # Revocation store abstraction
+│   └── IRevocationStore.cs         # Revocation store abstraction
 └── Models/
-    └── RevocationRecord.cs     # Revocation data model
+    ├── RevocationRecord.cs          # Revocation data model
+    └── RevocationReason.cs          # RFC 5280 revocation reason codes
 ```
 
 ## Quick Start
@@ -238,10 +241,11 @@ Previously, this package used ASP.NET Core Output Caching at the HTTP level. Thi
 ```csharp
 public class RevocationRecord
 {
-    public string SerialNumber { get; set; }          // Certificate serial number (hex)
-    public DateTime RevokedAt { get; set; }            // When the certificate was revoked
-    public int Reason { get; set; }                    // CRL reason code (0-10)
-    public string IssuerDistinguishedName { get; set; }// Issuer DN
+    public required string SerialNumber { get; set; }              // Certificate serial number (hex, uppercase)
+    public required DateTimeOffset RevocationDate { get; set; }    // When the certificate was revoked
+    public required RevocationReason Reason { get; set; }          // RFC 5280 revocation reason
+    public required string IssuerDistinguishedName { get; set; }   // Issuer DN
+    public string? Comments { get; set; }                          // Optional revocation comments
 }
 ```
 
@@ -263,21 +267,22 @@ public class RevocationRecord
 This package fits into the KeyVaultCa toolkit as the core OCSP logic layer:
 
 ```
-┌──────────────────────────────────┐
-│ KeyVaultCa.Revocation.Ocsp.Hosting │ ← HTTP hosting (ASP.NET Core)
-└──────────────────────────────────┘
+┌──────────────────────────────────────┐
+│ KeyVaultCa.Revocation.Ocsp.Hosting   │ ← HTTP hosting (ASP.NET Core)
+└──────────────────────────────────────┘
               ↓ depends on
-┌──────────────────────────────────┐
-│   KeyVaultCa.Revocation          │ ← This package (core OCSP logic)
-│   - OcspResponseBuilder          │
-│   - CachedRevocationStore        │
-│   - IRevocationStore             │
-└──────────────────────────────────┘
-              ↓ depends on
-┌──────────────────────────────────┐
-│   KeyVaultCa.Core                │ ← Key Vault integration
-│   - KeyVaultSignatureGenerator   │
-└──────────────────────────────────┘
+┌──────────────────────────────────────┐
+│   KeyVaultCa.Revocation              │ ← This package (core OCSP/CRL logic)
+│   - OcspResponseBuilder              │
+│   - CrlGenerator                     │
+│   - CachedRevocationStore            │
+│   - IRevocationStore                 │
+└──────────────────────────────────────┘
+         ↑ implements              ↓ depends on
+┌────────────────────────┐  ┌──────────────────────────────────┐
+│ Revocation.KeyVault    │  │   KeyVaultCa.Core                │
+│ - KeyVault tags store  │  │   - KeyVaultSignatureGenerator   │
+└────────────────────────┘  └──────────────────────────────────┘
 ```
 
 ## Dependencies
@@ -300,7 +305,7 @@ See `KeyVaultCa.Revocation.Tests` for comprehensive unit tests covering:
 ## Related Packages
 
 - **[KeyVaultCa.Revocation.Ocsp.Hosting](../KeyVaultCa.Revocation.Ocsp.Hosting/)**: ASP.NET Core hosting for OCSP responders
-- **[KeyVaultCa.Revocation.TableStorage](../KeyVaultCa.Revocation.TableStorage/)**: Azure Table Storage `IRevocationStore` implementation
+- **[KeyVaultCa.Revocation.KeyVault](../KeyVaultCa.Revocation.KeyVault/)**: Azure Key Vault certificate tags `IRevocationStore` implementation (recommended)
 - **[KeyVaultCa.Core](../KeyVaultCa.Core/)**: Azure Key Vault signing and certificate operations
 
 ## License

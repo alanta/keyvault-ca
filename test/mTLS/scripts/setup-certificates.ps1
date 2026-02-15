@@ -29,7 +29,7 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $KeyVaultUrl = "https://$KeyVaultName.vault.azure.net"
 $OcspUrl = "http://ocsp.localhost:5000"
-$CliPath = "../../../src/KeyVaultCa.Cli/bin/Debug/net8.0/KeyVaultCa.Cli"
+$CliPath = "../../../src/KeyVaultCa.Cli/bin/Debug/net10.0/KeyVaultCa.Cli"
 $CertsDir = "../certs"
 
 Write-Host "================================" -ForegroundColor Cyan

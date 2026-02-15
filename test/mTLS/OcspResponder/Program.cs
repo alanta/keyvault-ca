@@ -1,5 +1,5 @@
+using KeyVaultCa.Revocation.KeyVault;
 using KeyVaultCa.Revocation.Ocsp.Hosting;
-using KeyVaultCa.Revocation.TableStorage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,10 +11,8 @@ builder.Services.AddOutputCache();
 // Add OCSP responder with Azure Key Vault
 builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
 
-// Add revocation store
-var tableConnectionString = builder.Configuration.GetConnectionString("tables")
-    ?? throw new InvalidOperationException("Table Storage connection string not configured");
-builder.Services.AddTableStorageRevocationStore(tableConnectionString);
+// Add revocation store using Key Vault certificate tags
+builder.Services.AddKeyVaultRevocationStore(builder.Configuration.GetValue<Uri>("OcspResponder:KeyVaultUrl"));
 
 var app = builder.Build();
 

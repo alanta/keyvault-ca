@@ -1,6 +1,9 @@
-using KeyVaultCa.Revocation.Interfaces;
+using Azure.Identity;
+using Azure.Security.KeyVault.Certificates;
+using KeyVaultCa.Core;
+using KeyVaultCa.Revocation;
+using KeyVaultCa.Revocation.KeyVault;
 using KeyVaultCa.Revocation.Models;
-using KeyVaultCa.Revocation.TableStorage;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -12,16 +15,40 @@ public class RevokeCert(ILoggerFactory loggerFactory)
     private readonly ILogger<RevokeCert> _logger = loggerFactory.CreateLogger<RevokeCert>();
 
     public async Task Execute(
+        string keyVault,
         string serialNumber,
         RevocationReason reason,
         string? comments,
         string issuerDistinguishedName,
-        string storageConnectionString,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Revoking certificate with serial number {Serial}", serialNumber);
 
-        var store = new TableStorageRevocationStore(storageConnectionString, loggerFactory);
+        var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+        {
+            ExcludeEnvironmentCredential = false,
+            ExcludeManagedIdentityCredential = false,
+            ExcludeVisualStudioCredential = false,
+            ExcludeVisualStudioCodeCredential = false,
+            ExcludeAzureCliCredential = false,
+            ExcludeAzurePowerShellCredential = false,
+            ExcludeInteractiveBrowserCredential = true
+        });
+
+        var store = new KeyVaultRevocationStore(
+            uri => new CertificateClient(uri, credential),
+            loggerFactory.CreateLogger<KeyVaultRevocationStore>());
+
+        var keyVaultUri = GetKeyVaultUri(keyVault);
+
+        // Find the certificate by serial number
+        var certName = await store.FindCertificateBySerialNumberAsync(keyVaultUri, serialNumber, cancellationToken);
+        if (certName == null)
+        {
+            _logger.LogError("Certificate with serial number {Serial} not found in Key Vault {Vault}", 
+                serialNumber, keyVault);
+            throw new InvalidOperationException($"Certificate with serial number {serialNumber} not found");
+        }
 
         await store.AddRevocationAsync(new RevocationRecord
         {
@@ -32,14 +59,26 @@ public class RevokeCert(ILoggerFactory loggerFactory)
             Comments = comments
         }, cancellationToken);
 
-        _logger.LogInformation("Certificate {Serial} has been revoked with reason: {Reason}",
-            serialNumber, reason);
+        _logger.LogInformation("✅ Certificate {Name} (serial: {Serial}) has been revoked with reason: {Reason}",
+            certName, serialNumber, reason);
+    }
+
+    private static Uri GetKeyVaultUri(string keyVault)
+    {
+        var fullUrl = keyVault.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            ? keyVault
+            : $"https://{keyVault}.vault.azure.net/";
+        return new Uri(fullUrl);
     }
 
     public static void Configure(CommandLineApplication cmd)
     {
-        cmd.Description = "Revoke a certificate by serial number";
+        cmd.Description = "Revoke a certificate by serial number (updates certificate tags in Key Vault)";
         cmd.HelpOption(inherited: true);
+
+        var kvOption = cmd.Option("-kv|--key-vault <KEY_VAULT>",
+            "The name or full URL of the Key Vault containing the certificate",
+            CommandOptionType.SingleValue).IsRequired();
 
         var serialArg = cmd.Argument<string>("serial", "Certificate serial number (hexadecimal)").IsRequired();
 
@@ -55,24 +94,18 @@ public class RevokeCert(ILoggerFactory loggerFactory)
             "Issuer Distinguished Name (e.g., CN=MyCA)",
             CommandOptionType.SingleValue).IsRequired();
 
-        var storageOpt = cmd.Option<string>("--storage <CONNECTION_STRING>",
-            "Azure Table Storage connection string (or environment variable name)",
-            CommandOptionType.SingleValue).IsRequired();
-
         cmd.OnExecuteAsync(async cancellationToken =>
         {
             var reasonStr = reasonOpt.Value() ?? "unspecified";
             var reason = ParseRevocationReason(reasonStr);
 
-            var storageConnection = GetConnectionString(storageOpt.Value()!);
-
             var handler = new RevokeCert(CliApp.ServiceProvider.GetRequiredService<ILoggerFactory>());
             await handler.Execute(
+                kvOption.Value()!,
                 serialArg.Value!,
                 reason,
                 commentsOpt.Value(),
                 issuerOpt.Value()!,
-                storageConnection,
                 cancellationToken);
         });
     }
@@ -92,18 +125,5 @@ public class RevokeCert(ILoggerFactory loggerFactory)
             "aacompromise" => RevocationReason.AACompromise,
             _ => throw new ArgumentException($"Unknown revocation reason: {reason}")
         };
-    }
-
-    private static string GetConnectionString(string value)
-    {
-        // Check if it's an environment variable
-        var envValue = Environment.GetEnvironmentVariable(value);
-        if (!string.IsNullOrEmpty(envValue))
-        {
-            return envValue;
-        }
-
-        // Otherwise, treat it as a connection string
-        return value;
     }
 }

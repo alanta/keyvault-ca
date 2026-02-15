@@ -47,6 +47,7 @@ namespace KeyVaultCa.Core
         /// <param name="hashAlgorithm">Optional. The hashing algorithm. Defaults tp SHA256</param>
         /// <param name="extensions">Optional. Aditional extension for the certificate. These extensions will replace
         /// extensions with the same OID in the CSR.</param>
+        /// <param name="revocationConfig"></param>
         /// <returns></returns>
         /// <exception cref="ArgumentNullException"></exception>
         /// <exception cref="ArgumentException"></exception>

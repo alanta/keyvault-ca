@@ -8,7 +8,7 @@ namespace KeyVaultCa.Revocation.Ocsp.Hosting;
 /// </summary>
 public class OcspHealthCheck : IHealthCheck
 {
-    private static bool _initialized = false;
+    private static bool _initialized;
 
     /// <summary>
     /// Marks the OCSP responder as initialized.

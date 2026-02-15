@@ -7,7 +7,6 @@ using KeyVaultCa.Core;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Security;
 
 namespace KeyVaultCa.Revocation;
 

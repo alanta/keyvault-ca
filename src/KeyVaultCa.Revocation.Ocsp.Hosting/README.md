@@ -19,8 +19,8 @@ A modern, easy-to-use ASP.NET Core hosting package for OCSP (Online Certificate 
 <!-- OCSP hosting with Azure Key Vault -->
 <PackageReference Include="KeyVaultCa.Revocation.Ocsp.Hosting" />
 
-<!-- Revocation store implementation (Table Storage example) -->
-<PackageReference Include="KeyVaultCa.Revocation.TableStorage" />
+<!-- Revocation store implementation (Key Vault tags) -->
+<PackageReference Include="KeyVaultCa.Revocation.KeyVault" />
 ```
 
 **Note**: The hosting package is agnostic to the revocation store. You can use any `IRevocationStore` implementation.
@@ -34,9 +34,6 @@ A modern, easy-to-use ASP.NET Core hosting package for OCSP (Online Certificate 
     "OcspSignerCertName": "ocsp-signer",
     "IssuerCertName": "root-ca",
     "ResponseValidityMinutes": 1440
-  },
-  "ConnectionStrings": {
-    "tables": "UseDevelopmentStorage=true"
   }
 }
 ```
@@ -45,16 +42,16 @@ A modern, easy-to-use ASP.NET Core hosting package for OCSP (Online Certificate 
 
 ```csharp
 using KeyVaultCa.Revocation.Ocsp.Hosting;
-using KeyVaultCa.Revocation.TableStorage;
+using KeyVaultCa.Revocation.KeyVault;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add OCSP responder with Azure Key Vault
 builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
 
-// Add revocation store (Table Storage implementation)
-builder.Services.AddTableStorageRevocationStore(
-    builder.Configuration.GetConnectionString("tables")!);
+// Add revocation store (Key Vault tags implementation)
+builder.Services.AddKeyVaultRevocationStore(
+    builder.Configuration.GetValue<Uri>("OcspResponder:KeyVaultUrl")!);
 
 var app = builder.Build();
 
@@ -98,22 +95,21 @@ That's it! Your OCSP responder is ready to handle certificate status requests.
 The Azure identity (managed identity, service principal, or user) must have:
 
 - **Key Vault**: `Certificates Reader` and `Crypto User` roles
-- **Storage**: `Storage Table Data Contributor` role (for revocation store)
 
 ## Example: Using with .NET Aspire
 
 ```csharp
 // Program.cs
 using KeyVaultCa.Revocation.Ocsp.Hosting;
-using KeyVaultCa.Revocation.TableStorage;
+using KeyVaultCa.Revocation.KeyVault;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults(); // Aspire defaults
 
 builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
-builder.Services.AddTableStorageRevocationStore(
-    builder.Configuration.GetConnectionString("tables")!);
+builder.Services.AddKeyVaultRevocationStore(
+    builder.Configuration.GetValue<Uri>("OcspResponder:KeyVaultUrl")!);
 
 var app = builder.Build();
 
@@ -151,22 +147,22 @@ This package is part of the KeyVaultCa toolkit:
 
 ## Performance: Automatic Caching
 
-The revocation store implementation (e.g., `AddTableStorageRevocationStore`) automatically includes **HybridCache** for optimal performance with zero configuration required.
+The revocation store implementation (e.g., `AddKeyVaultRevocationStore`) automatically includes **HybridCache** for optimal performance with zero configuration required.
 
 ### Performance Impact
 
-- **Without cache**: ~100-300ms per request (Table Storage + Key Vault signing)
-- **With cache hit**: ~10-50ms (Key Vault signing only, Table Storage lookup cached)
+- **Without cache**: ~50-200ms per request (Key Vault lookup + signing)
+- **With cache hit**: ~10-50ms (Key Vault signing only, revocation lookup cached)
 - **Cache TTL**: 10 minutes (automatic)
 
 ### How It Works
 
 Caching is implemented using the **decorator pattern** at the revocation store level:
 
-1. `TableStorageRevocationStore` handles Azure Table Storage operations
+1. `KeyVaultRevocationStore` handles Azure Key Vault certificate tag operations
 2. `CachedRevocationStore` wraps it with HybridCache
 3. Certificate revocation lookups are cached by serial number
-4. **Stampede protection** prevents multiple concurrent requests from hitting Table Storage
+4. **Stampede protection** prevents multiple concurrent requests from hitting Key Vault
 
 ### Key Benefits
 
@@ -212,7 +208,7 @@ This package requires .NET 10.0 or later. Update your project's `<TargetFramewor
 ## Related Packages
 
 - **[KeyVaultCa.Revocation](../KeyVaultCa.Revocation/)**: Core OCSP response building logic
-- **[KeyVaultCa.Revocation.TableStorage](../KeyVaultCa.Revocation.TableStorage/)**: Azure Table Storage revocation store
+- **[KeyVaultCa.Revocation.KeyVault](../KeyVaultCa.Revocation.KeyVault/)**: Key Vault certificate tags revocation store (recommended)
 - **[KeyVaultCa.Core](../KeyVaultCa.Core/)**: Azure Key Vault signing and certificate operations
 
 ## License

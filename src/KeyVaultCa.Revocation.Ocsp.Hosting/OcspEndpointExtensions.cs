@@ -62,8 +62,7 @@ public static class OcspEndpointExtensions
             }
         })
         .WithName("OcspPost")
-        .WithMetadata(new RequestSizeLimitAttribute(65536)) // RFC 6960 Appendix A.1 - Cap at 64KB to prevent DoS
-        .WithOpenApi();
+        .WithMetadata(new RequestSizeLimitAttribute(65536)); // RFC 6960 Appendix A.1 - Cap at 64KB to prevent DoS
 
         // GET endpoint (RFC 6960 Appendix A.1 - optional)
         endpoints.MapGet($"{pattern}{{base64Request}}", async (
@@ -113,8 +112,7 @@ public static class OcspEndpointExtensions
                 return Results.Problem("Internal server error processing OCSP request");
             }
         })
-        .WithName("OcspGet")
-        .WithOpenApi();
+        .WithName("OcspGet");
 
         return endpoints;
     }

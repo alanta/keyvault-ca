@@ -1,12 +1,11 @@
-using System;
-using System.IO;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
+using Azure.Identity;
+using Azure.Security.KeyVault.Certificates;
+using Azure.Security.KeyVault.Keys.Cryptography;
 using KeyVaultCa.Core;
 using KeyVaultCa.Revocation;
-using KeyVaultCa.Revocation.TableStorage;
+using KeyVaultCa.Revocation.KeyVault;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -21,14 +20,22 @@ public class GenerateCrl(ILoggerFactory loggerFactory)
         KeyVaultSecretReference issuer,
         string outputPath,
         TimeSpan validityPeriod,
-        string storageConnectionString,
         long? crlNumber,
         CancellationToken cancellationToken)
     {
-        var clientFactory = new CachedClientFactory();
+        var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+        {
+            ExcludeEnvironmentCredential = false,
+            ExcludeManagedIdentityCredential = false,
+            ExcludeVisualStudioCredential = false,
+            ExcludeVisualStudioCodeCredential = false,
+            ExcludeAzureCliCredential = false,
+            ExcludeAzurePowerShellCredential = false,
+            ExcludeInteractiveBrowserCredential = true
+        });
 
         // Get the issuer certificate from Key Vault
-        var certificateClient = clientFactory.GetCertificateClientFactory(issuer.KeyVaultUrl);
+        var certificateClient = new CertificateClient(issuer.KeyVaultUrl, credential);
         var certResponse = await certificateClient.GetCertificateAsync(issuer.SecretName, cancellationToken);
         var issuerCertificate = X509CertificateLoader.LoadCertificate(certResponse.Value.Cer);
 
@@ -37,12 +44,20 @@ public class GenerateCrl(ILoggerFactory loggerFactory)
         // Create signature generator
         var keyUri = certResponse.Value.KeyId;
         var signatureGenerator = new KeyVaultSignatureGenerator(
-            clientFactory.GetCryptographyClient,
+            uri => new CryptographyClient(uri, credential),
             keyUri,
             issuerCertificate.SignatureAlgorithm);
 
-        // Create revocation store
-        var revocationStore = new TableStorageRevocationStore(storageConnectionString, loggerFactory);
+        // Create Key Vault-based revocation store
+        var revocationStore = new KeyVaultRevocationStore(
+            uri => new CertificateClient(uri, credential),
+            loggerFactory.CreateLogger<KeyVaultRevocationStore>());
+
+        // Get revocations from the same Key Vault as the issuer
+        var revocations = await revocationStore.GetRevocationsByIssuerAsync(
+            issuer.KeyVaultUrl,
+            issuerCertificate.Subject,
+            cancellationToken);
 
         // Generate CRL
         var crlGenerator = new CrlGenerator(revocationStore);
@@ -66,7 +81,7 @@ public class GenerateCrl(ILoggerFactory loggerFactory)
 
     public static void Configure(CommandLineApplication cmd)
     {
-        cmd.Description = "Generates a Certificate Revocation List (CRL) signed by an issuer certificate.";
+        cmd.Description = "Generates a Certificate Revocation List (CRL) from revoked certificates in Key Vault.";
         cmd.HelpOption(inherited: true);
 
         var kvOption = cmd.Option<string>("-kv|--key-vault <KEY_VAULT>",
@@ -86,10 +101,6 @@ public class GenerateCrl(ILoggerFactory loggerFactory)
             "How long the CRL is valid (e.g., 7d, 24h, 30d). Default: 7 days.",
             CommandOptionType.SingleValue);
 
-        var storageOption = cmd.Option<string>("--storage-connection <CONNECTION_STRING>",
-                "Azure Table Storage connection string for revocation data. Can also use AZURE_STORAGE_CONNECTION_STRING environment variable.",
-                CommandOptionType.SingleValue);
-
         var crlNumberOption = cmd.Option<long>("--crl-number <NUMBER>",
             "Sequential CRL number for tracking versions (optional but recommended).",
             CommandOptionType.SingleValue);
@@ -104,21 +115,10 @@ public class GenerateCrl(ILoggerFactory loggerFactory)
                 ? validityOption.ParsedValue
                 : TimeSpan.FromDays(7);
 
-            // Get storage connection string from option or environment variable
-            var storageConnectionString = storageOption.Value()
-                                          ?? Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING");
-
-            if (string.IsNullOrEmpty(storageConnectionString))
-            {
-                throw new InvalidOperationException(
-                    "Storage connection string must be provided via --storage-connection option or AZURE_STORAGE_CONNECTION_STRING environment variable.");
-            }
-
             long? crlNumber = crlNumberOption.HasValue() ? crlNumberOption.ParsedValue : null;
 
             var handler = new GenerateCrl(CliApp.ServiceProvider.GetRequiredService<ILoggerFactory>());
-            await handler.Execute(issuer, outputPath, validityPeriod, storageConnectionString, crlNumber,
-                cancellationToken);
+            await handler.Execute(issuer, outputPath, validityPeriod, crlNumber, cancellationToken);
         });
     }
 }

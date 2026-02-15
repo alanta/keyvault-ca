@@ -1,17 +1,12 @@
-using System;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using FakeItEasy;
 using KeyVaultCa.Revocation.Models;
-using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Ocsp;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Math;
 using Shouldly;
-using Xunit;
 
 namespace KeyVaultCa.Revocation.Tests;
 

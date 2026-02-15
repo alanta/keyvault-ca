@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\KeyVaultCa.Revocation.Ocsp.Hosting\KeyVaultCa.Revocation.Ocsp.Hosting.csproj" />
-    <ProjectReference Include="..\..\..\src\KeyVaultCa.Revocation.TableStorage\KeyVaultCa.Revocation.TableStorage.csproj" />
+    <ProjectReference Include="..\..\..\src\KeyVaultCa.Revocation.KeyVault\KeyVaultCa.Revocation.KeyVault.csproj" />
     <ProjectReference Include="..\ServiceDefaults\ServiceDefaults.csproj" />
   </ItemGroup>
 

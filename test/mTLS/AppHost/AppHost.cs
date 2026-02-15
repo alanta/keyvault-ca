@@ -1,21 +1,15 @@
-#:sdk Aspire.AppHost.Sdk@13.1.0
+#:sdk Aspire.AppHost.Sdk@13.1.1
 #:package Aspire.Hosting.AppHost
-#:package Aspire.Hosting.Azure.Storage
 #:project ..\OcspResponder\OcspResponder.csproj
 #:project ..\ApiServer\ApiServer.csproj
 #:project ..\ClientApp\ClientApp.csproj
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-// Azure Table Storage (Azurite emulator for local development)
-var storage = builder.AddAzureStorage("storage").RunAsEmulator();
-var tables = storage.AddTables("tables");
-
 // OCSP Responder - validates certificate revocation status
+// Now uses Key Vault tags for revocation data (no external storage needed)
 var ocspResponder = builder.AddProject<Projects.OcspResponder>("ocsp-responder")
-	.WithReference(tables)
-	.WithHttpHealthCheck("/health")
-	.WaitFor(storage);
+	.WithHttpHealthCheck("/health");
 
 // API Server - requires mTLS with OCSP validation
 var apiServer = builder.AddProject<Projects.ApiServer>("api-server")
