@@ -81,7 +81,6 @@ public static class OcspServiceCollectionExtensions
                 .GetCertificateAsync(options.IssuerCertName);
             issuerCert = X509CertificateLoader
                 .LoadCertificate(issuerCertResponse.Value.Cer);
-            Console.WriteLine("Issuer certificate loaded.");
         }
         catch (Exception exception)
         {

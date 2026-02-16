@@ -235,16 +235,9 @@ public class OcspResponseBuilder
 
     private string GetSignatureAlgorithmOid()
     {
-        var isEcdsa = _ocspSigningCert.GetECDsaPublicKey() != null;
-
-        if (isEcdsa)
-        {
-            return "1.2.840.10045.4.3.2"; // ecdsa-with-SHA256
-        }
-        else
-        {
-            return "1.2.840.113549.1.1.11"; // sha256WithRSAEncryption
-        }
+        return _ocspSigningCert.GetECDsaPublicKey() != null
+            ? WellKnownOids.SignatureAlgorithms.ECDsaWithSha256
+            : WellKnownOids.SignatureAlgorithms.Sha256WithRSAEncryption;
     }
 
     /// <summary>
@@ -255,7 +248,7 @@ public class OcspResponseBuilder
     {
         if (extensions == null) return null;
 
-        var nonceOid = new DerObjectIdentifier("1.3.6.1.5.5.7.48.1.2");
+        var nonceOid = new DerObjectIdentifier(WellKnownOids.Ocsp.Nonce);
         var nonceExt = extensions.GetExtension(nonceOid);
         if (nonceExt == null) return null;
 
@@ -272,7 +265,7 @@ public class OcspResponseBuilder
     {
         if (nonce == null) return null;
 
-        var nonceOid = new DerObjectIdentifier("1.3.6.1.5.5.7.48.1.2");
+        var nonceOid = new DerObjectIdentifier(WellKnownOids.Ocsp.Nonce);
         var nonceValue = new DerOctetString(nonce);
         var nonceExt = new Org.BouncyCastle.Asn1.X509.X509Extension(false, new DerOctetString(nonceValue.GetEncoded()));
 
@@ -290,8 +283,7 @@ public class OcspResponseBuilder
     /// </summary>
     private X509Extensions BuildResponseExtensions()
     {
-        // id-pkix-ocsp-nocheck (1.3.6.1.5.5.7.48.1.5)
-        var nocheckOid = new DerObjectIdentifier("1.3.6.1.5.5.7.48.1.5");
+        var nocheckOid = new DerObjectIdentifier(WellKnownOids.Ocsp.NoCheck);
         var nocheckValue = DerNull.Instance.GetEncoded();
         var nocheckExt = new Org.BouncyCastle.Asn1.X509.X509Extension(false, new DerOctetString(nocheckValue));
 
@@ -309,24 +301,19 @@ public class OcspResponseBuilder
     /// </summary>
     private bool ValidateIssuer(CertID certId, X509Certificate2 issuerCert)
     {
-        // Get hash algorithm from CertID
         var hashAlgOid = certId.HashAlgorithm.Algorithm.Id;
-        HashAlgorithm hashAlg = hashAlgOid switch
+
+        var issuerDN = issuerCert.SubjectName.RawData;
+        var issuerKeyInfo = issuerCert.PublicKey.EncodedKeyValue.RawData;
+
+        var (expectedNameHash, expectedKeyHash) = hashAlgOid switch
         {
-            "1.3.14.3.2.26" => SHA1.Create(),                   // sha1
-            "2.16.840.1.101.3.4.2.1" => SHA256.Create(),        // sha256
-            "2.16.840.1.101.3.4.2.2" => SHA384.Create(),        // sha384
-            "2.16.840.1.101.3.4.2.3" => SHA512.Create(),        // sha512
+            WellKnownOids.HashAlgorithms.Sha1 => (SHA1.HashData(issuerDN), SHA1.HashData(issuerKeyInfo)),
+            WellKnownOids.HashAlgorithms.Sha256 => (SHA256.HashData(issuerDN), SHA256.HashData(issuerKeyInfo)),
+            WellKnownOids.HashAlgorithms.Sha384 => (SHA384.HashData(issuerDN), SHA384.HashData(issuerKeyInfo)),
+            WellKnownOids.HashAlgorithms.Sha512 => (SHA512.HashData(issuerDN), SHA512.HashData(issuerKeyInfo)),
             _ => throw new NotSupportedException($"Hash algorithm {hashAlgOid} not supported in OCSP request")
         };
-
-        // Compute expected issuerNameHash
-        var issuerDN = issuerCert.SubjectName.RawData;
-        var expectedNameHash = hashAlg.ComputeHash(issuerDN);
-
-        // Compute expected issuerKeyHash (from subject public key field)
-        var issuerKeyInfo = issuerCert.PublicKey.EncodedKeyValue.RawData;
-        var expectedKeyHash = hashAlg.ComputeHash(issuerKeyInfo);
 
         // Constant-time comparison to prevent timing attacks
         var nameHashMatch = CryptographicOperations.FixedTimeEquals(

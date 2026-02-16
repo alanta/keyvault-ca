@@ -43,6 +43,48 @@ public static class WellKnownOids
     }
 
     /// <summary>
+    /// OCSP extension OIDs - RFC 6960
+    /// </summary>
+    public static class Ocsp
+    {
+        /// <summary>
+        /// id-pkix-ocsp-nonce - RFC 6960 Appendix B
+        /// </summary>
+        public const string Nonce = "1.3.6.1.5.5.7.48.1.2";
+
+        /// <summary>
+        /// id-pkix-ocsp-nocheck - RFC 6960 Section 4.2.2.2.1
+        /// </summary>
+        public const string NoCheck = "1.3.6.1.5.5.7.48.1.5";
+    }
+
+    /// <summary>
+    /// Hash algorithm OIDs - NIST FIPS 180-4 / OIW SECSIG
+    /// </summary>
+    public static class HashAlgorithms
+    {
+        /// <summary>
+        /// SHA-1 - OIW SECSIG (source: https://oidref.com/1.3.14.3.2.26)
+        /// </summary>
+        public const string Sha1 = "1.3.14.3.2.26";
+
+        /// <summary>
+        /// SHA-256 - NIST (source: https://oidref.com/2.16.840.1.101.3.4.2.1)
+        /// </summary>
+        public const string Sha256 = "2.16.840.1.101.3.4.2.1";
+
+        /// <summary>
+        /// SHA-384 - NIST (source: https://oidref.com/2.16.840.1.101.3.4.2.2)
+        /// </summary>
+        public const string Sha384 = "2.16.840.1.101.3.4.2.2";
+
+        /// <summary>
+        /// SHA-512 - NIST (source: https://oidref.com/2.16.840.1.101.3.4.2.3)
+        /// </summary>
+        public const string Sha512 = "2.16.840.1.101.3.4.2.3";
+    }
+
+    /// <summary>
     /// Signature algorithm OIDs for PKCS#1 (RSA) and ANSI X9.62 (ECDSA)
     /// </summary>
     public static class SignatureAlgorithms

@@ -109,8 +109,6 @@ public class KeyVaultRevocationStore : IRevocationStore
     {
         _logger.LogInformation("Scanning for revoked certificates issued by {Issuer}", issuerDistinguishedName);
 
-        var revocations = new List<RevocationRecord>();
-
         // Note: This requires scanning multiple Key Vaults if configured
         // TODO: Support multiple Key Vaults via configuration
         if (_keyVaultUri == null)

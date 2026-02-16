@@ -35,8 +35,7 @@ All orchestrated by .NET Aspire AppHost with:
 
 ## Prerequisites
 
-- **.NET 8.0 SDK** installed
-- **.NET Aspire workload** - Install with: `dotnet workload install aspire`
+- **.NET 10.0 SDK** installed
 - **Azure Key Vault** - An existing Azure Key Vault (development/test vault)
 - **Azure CLI** or authenticated with `DefaultAzureCredential`
 - **PowerShell Core** (for setup script) - Works on Windows, macOS, and Linux
@@ -150,7 +149,7 @@ The `.localhost` TLD should resolve automatically to 127.0.0.1, but if you encou
 
 ```bash
 cd test/mTLS/AppHost
-dotnet run
+aspire run
 ```
 
 Aspire will:
@@ -222,8 +221,7 @@ The client runs 3 times to demonstrate OCSP response caching - only the first ru
 ### Aspire Won't Start
 
 If Aspire fails to start:
-1. Install Aspire workload: `dotnet workload install aspire`
-2. Check port 15888 is not in use (Aspire Dashboard)
+1. Check port 15888 is not in use (Aspire Dashboard)
 
 ### Key Vault Access Denied
 
