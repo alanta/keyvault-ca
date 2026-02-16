@@ -60,11 +60,20 @@ jobs:
           path: coverage
           if-no-files-found: warn
 
+      - name: "🔀 Merge coverage reports"
+        if: always()
+        run: |
+          dotnet tool install -g dotnet-reportgenerator-globaltool
+          reportgenerator \
+            -reports:coverage/*/coverage.cobertura.xml \
+            -targetdir:coverage/merged \
+            -reporttypes:Cobertura
+
       - name: "📈 Coverage summary"
         if: always()
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
-          filename: coverage/*/coverage.cobertura.xml
+          filename: coverage/merged/Cobertura.xml
           badge: true
           format: markdown
           output: both
