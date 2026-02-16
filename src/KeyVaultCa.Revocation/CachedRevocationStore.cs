@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using KeyVaultCa.Core;
 using KeyVaultCa.Revocation.Interfaces;
 using KeyVaultCa.Revocation.Models;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -58,8 +59,8 @@ public class CachedRevocationStore : IRevocationStore
     /// <inheritdoc/>
     public async Task<RevocationRecord?> GetRevocationAsync(string serialNumber, CancellationToken ct = default)
     {
-        var serialUpper = serialNumber.ToUpperInvariant();
-        var cacheKey = GetCacheKey(serialUpper);
+        var normalizedSerial = SerialNumberHelper.Normalize(serialNumber);
+        var cacheKey = GetCacheKey(normalizedSerial);
 
         // HybridCache provides automatic stampede protection and caching
         var record = await _cache.GetOrCreateAsync(

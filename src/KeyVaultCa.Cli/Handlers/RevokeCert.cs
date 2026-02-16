@@ -52,7 +52,7 @@ public class RevokeCert(ILoggerFactory loggerFactory)
 
         await store.AddRevocationAsync(new RevocationRecord
         {
-            SerialNumber = serialNumber.ToUpperInvariant(),
+            SerialNumber = SerialNumberHelper.Normalize(serialNumber),
             RevocationDate = DateTimeOffset.UtcNow,
             Reason = reason,
             IssuerDistinguishedName = issuerDistinguishedName,

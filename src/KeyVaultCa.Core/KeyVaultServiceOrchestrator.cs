@@ -438,7 +438,7 @@ namespace KeyVaultCa.Core
         {
             try
             {
-                var serialNumber = certificate.SerialNumber;
+                var serialNumber = SerialNumberHelper.Normalize(certificate.SerialNumber);
                 _logger.LogDebug("Adding serial number tag {serial} to certificate {name}", serialNumber, certificateName);
 
                 var certResponse = await client.GetCertificateAsync(certificateName, ct);

@@ -83,9 +83,7 @@ public static class OcspEndpointExtensions
                     return Results.StatusCode(413); // Payload Too Large
                 }
 
-                // Base64URL decoding (replace URL-safe characters)
-                var requestBytes = Convert.FromBase64String(
-                    base64Request.Replace('_', '/').Replace('-', '+'));
+                var requestBytes = DecodeBas64RequestBytes(base64Request);
 
                 logger.LogInformation(
                     "OCSP GET request received from {RemoteIpAddress}, size: {Size} bytes",
@@ -115,5 +113,18 @@ public static class OcspEndpointExtensions
         .WithName("OcspGet");
 
         return endpoints;
+    }
+
+    private static byte[] DecodeBas64RequestBytes(string base64Request)
+    {
+        // Base64URL decoding (replace URL-safe characters and add padding)
+        var base64 = base64Request.Replace('_', '/').Replace('-', '+');
+        switch (base64.Length % 4)
+        {
+            case 2: base64 += "=="; break;
+            case 3: base64 += "="; break;
+        }
+        var requestBytes = Convert.FromBase64String(base64);
+        return requestBytes;
     }
 }

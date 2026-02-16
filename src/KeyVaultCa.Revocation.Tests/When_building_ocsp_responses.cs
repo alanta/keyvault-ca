@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using FakeItEasy;
+using KeyVaultCa.Core;
 using KeyVaultCa.Revocation.Models;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Ocsp;
@@ -111,6 +112,58 @@ public class When_building_ocsp_responses : TestBase
 
         var revokedInfo = RevokedInfo.GetInstance(certStatus.Status);
         revokedInfo.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task It_should_find_revoked_cert_when_serial_has_leading_zeros()
+    {
+        // Arrange
+        var issuerCert = CreateTestCertificate("CN=Test CA", isCa: true);
+        var ocspSigningCert = CreateTestCertificate("CN=OCSP Signer", isCa: false);
+        var signatureGenerator = CreateFakeSignatureGenerator(ocspSigningCert);
+        var revocationStore = CreateFakeRevocationStore();
+        var logger = CreateFakeLogger<OcspResponseBuilder>();
+
+        // The serial stored in Key Vault tag with leading zeros (X509Certificate2.SerialNumber format)
+        const string storedSerial = "00AB1234567890CDEF";
+        // After normalization, both storage and OCSP lookup should use this form
+        var normalizedSerial = SerialNumberHelper.Normalize(storedSerial);
+        var revocationDate = DateTimeOffset.UtcNow.AddDays(-1);
+
+        // Setup: return revoked when queried with the normalized serial
+        A.CallTo(() => revocationStore.GetRevocationAsync(normalizedSerial, A<CancellationToken>._))
+            .Returns(Task.FromResult<RevocationRecord?>(new RevocationRecord
+            {
+                SerialNumber = normalizedSerial,
+                RevocationDate = revocationDate,
+                Reason = RevocationReason.KeyCompromise,
+                IssuerDistinguishedName = issuerCert.Subject
+            }));
+
+        var responseBuilder = new OcspResponseBuilder(
+            revocationStore,
+            signatureGenerator,
+            ocspSigningCert,
+            issuerCert,
+            logger);
+
+        // Create OCSP request with the leading-zero serial — BigInteger strips leading zeros internally
+        var ocspRequest = CreateOcspRequest(storedSerial, issuerCert);
+
+        // Act
+        var responseBytes = await responseBuilder.BuildResponseAsync(ocspRequest, CancellationToken.None);
+
+        // Assert — should return revoked, not good
+        var ocspResponse = OcspResponse.GetInstance(Asn1Object.FromByteArray(responseBytes));
+        var responseBytes2 = ResponseBytes.GetInstance(ocspResponse.ResponseBytes);
+        var basicResponse = BasicOcspResponse.GetInstance(
+            Asn1Object.FromByteArray(responseBytes2.Response.GetOctets()));
+
+        var singleResponse = SingleResponse.GetInstance(basicResponse.TbsResponseData.Responses[0]);
+        var certStatus = singleResponse.CertStatus;
+
+        // TagNo 1 means "revoked" — before the fix, this would be 0 (good) due to serial mismatch
+        certStatus.TagNo.ShouldBe(1);
     }
 
     [Fact]

@@ -90,7 +90,7 @@ public class OcspResponseBuilder
             // Process the first request (OCSP typically contains one request)
             var certReq = Request.GetInstance(requestList[0]);
             var certId = certReq.ReqCert;
-            var serialNumber = certId.SerialNumber.Value.ToString(16).ToUpperInvariant();
+            var serialNumber = SerialNumberHelper.Normalize(certId.SerialNumber.Value.ToString(16));
 
             _logger.LogInformation("Processing OCSP request for certificate serial: {Serial}", serialNumber);
 

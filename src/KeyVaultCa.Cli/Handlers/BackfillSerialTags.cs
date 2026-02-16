@@ -58,7 +58,7 @@ public class BackfillSerialTags(ILoggerFactory loggerFactory)
                 // Get the certificate to extract serial number
                 var cert = await certificateClient.GetCertificateAsync(certProperties.Name, cancellationToken);
                 var x509 = X509CertificateLoader.LoadCertificate(cert.Value.Cer);
-                var serialNumber = x509.SerialNumber;
+                var serialNumber = SerialNumberHelper.Normalize(x509.SerialNumber);
 
                 if (dryRun)
                 {

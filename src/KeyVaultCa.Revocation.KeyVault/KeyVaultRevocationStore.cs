@@ -1,5 +1,6 @@
 using Azure;
 using Azure.Security.KeyVault.Certificates;
+using KeyVaultCa.Core;
 using KeyVaultCa.Revocation.Interfaces;
 using KeyVaultCa.Revocation.Models;
 using Microsoft.Extensions.Logging;
@@ -201,10 +202,12 @@ public class KeyVaultRevocationStore : IRevocationStore
 
         var client = _certificateClientFactory(keyVaultUri);
 
+        var normalizedSerial = SerialNumberHelper.Normalize(serialNumber);
+
         await foreach (var certProperties in client.GetPropertiesOfCertificatesAsync())
         {
             if (certProperties.Tags.TryGetValue("SerialNumber", out var certSerial) &&
-                string.Equals(certSerial, serialNumber, StringComparison.OrdinalIgnoreCase))
+                string.Equals(SerialNumberHelper.Normalize(certSerial), normalizedSerial, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogDebug("Found certificate {Name} with serial {Serial}", 
                     certProperties.Name, serialNumber);
