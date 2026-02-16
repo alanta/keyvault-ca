@@ -9,7 +9,7 @@ namespace KeyVaultCa.Cli.Handlers;
 
 public class DownloadCert(ILoggerFactory loggerFactory)
 {
-    public async Task Execute(string keyVault, string name, bool key, bool pfx, string? pfxPassword, bool noPassword, CancellationToken cancellationToken)
+    public async Task<int> Execute(string keyVault, string name, bool key, bool pfx, string? pfxPassword, bool noPassword, CancellationToken cancellationToken)
     {
         var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
         {
@@ -35,7 +35,7 @@ public class DownloadCert(ILoggerFactory loggerFactory)
         {
             Console.Error.WriteLine("Error: Cannot export private key for CA certificates. The private key must remain in Key Vault.");
             Console.Error.WriteLine("To download only the public certificate, omit the --key flag.");
-            return;
+            return 1;
         }
         
         // Download with private key only if needed and allowed
@@ -92,8 +92,9 @@ public class DownloadCert(ILoggerFactory loggerFactory)
             }
         }
 
+        return 0;
     }
-    
+
     private static bool IsCaCertificate(X509Certificate2 certificate)
     {
         // Check for BasicConstraints extension with CA=true
@@ -125,7 +126,7 @@ public class DownloadCert(ILoggerFactory loggerFactory)
         cmd.OnExecuteAsync(async cancellationToken =>
         {
             var handler = new DownloadCert(CliApp.ServiceProvider.GetRequiredService<ILoggerFactory>());
-            await handler.Execute(kvOption.Value()!, nameArgument.Value!, keyOption.HasValue(), pfxOption.HasValue(), pfxPasswordOption.Value(), noPasswordOption.HasValue(), cancellationToken);
+            return await handler.Execute(kvOption.Value()!, nameArgument.Value!, keyOption.HasValue(), pfxOption.HasValue(), pfxPasswordOption.Value(), noPasswordOption.HasValue(), cancellationToken);
         });
     }
 }

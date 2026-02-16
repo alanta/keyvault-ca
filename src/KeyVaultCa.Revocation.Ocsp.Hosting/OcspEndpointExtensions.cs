@@ -26,13 +26,14 @@ public static class OcspEndpointExtensions
         endpoints.MapPost(pattern, async (
             HttpContext context,
             OcspResponseBuilder responseBuilder,
-            ILogger<OcspResponseBuilder> logger) =>
+            ILogger<OcspResponseBuilder> logger,
+            CancellationToken cancellationToken) =>
         {
             try
             {
                 // Read request body (size limit enforced by framework via RequestSizeLimitAttribute)
                 using var ms = new MemoryStream();
-                await context.Request.Body.CopyToAsync(ms);
+                await context.Request.Body.CopyToAsync(ms, cancellationToken);
                 var requestBytes = ms.ToArray();
 
                 if (requestBytes.Length == 0)
