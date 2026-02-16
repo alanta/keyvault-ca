@@ -9,7 +9,7 @@ builder.AddServiceDefaults();
 builder.Services.AddOutputCache();
 
 // Add OCSP responder with Azure Key Vault
-builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
+await builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
 
 // Add revocation store using Key Vault certificate tags
 builder.Services.AddKeyVaultRevocationStore(builder.Configuration.GetValue<Uri>("OcspResponder:KeyVaultUrl"));

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
 using KeyVaultCa.Revocation.Interfaces;
@@ -46,24 +47,10 @@ public static class KeyVaultRevocationServiceCollectionExtensions
                 ExcludeInteractiveBrowserCredential = true
             });
             
-            var clientCache = new Dictionary<Uri, CertificateClient>();
+            var clientCache = new ConcurrentDictionary<Uri, CertificateClient>();
 
             var certificateClientFactory = (Uri uri) =>
-            {
-                if (!clientCache.TryGetValue(uri, out var client))
-                {
-                    lock (clientCache)
-                    {
-                        if (!clientCache.TryGetValue(uri, out client))
-                        {
-                            client = new CertificateClient(uri, credential);
-                            clientCache.Add(uri, client);        
-                        }
-                    }
-                }
-
-                return client;
-            };
+                clientCache.GetOrAdd(uri, u => new CertificateClient(u, credential));
             
             var logger = sp.GetRequiredService<ILogger<KeyVaultRevocationStore>>();
             var cache = sp.GetRequiredService<HybridCache>();

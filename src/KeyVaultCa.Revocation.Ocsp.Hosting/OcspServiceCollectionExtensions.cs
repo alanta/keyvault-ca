@@ -23,7 +23,7 @@ public static class OcspServiceCollectionExtensions
     /// <param name="configuration">Application configuration containing OcspResponder section.</param>
     /// <returns>The service collection for chaining.</returns>
     /// <exception cref="InvalidOperationException">Thrown if Key Vault URL is not configured.</exception>
-    public static IServiceCollection AddKeyVaultOcspResponder(
+    public static async Task<IServiceCollection> AddKeyVaultOcspResponder(
         this IServiceCollection services,
         IConfiguration configuration)
     {
@@ -49,13 +49,11 @@ public static class OcspServiceCollectionExtensions
         // Load OCSP signing certificate
         try
         {
-            var ocspCertResponse = certClient
-                .GetCertificateAsync(options.OcspSignerCertName)
-                .GetAwaiter().GetResult();
+            var ocspCertResponse = await certClient
+                .GetCertificateAsync(options.OcspSignerCertName);
             ocspSigningCert = X509CertificateLoader
                 .LoadCertificate(ocspCertResponse.Value.Cer.ToArray());
             ocspSigningCertKeyUri = ocspCertResponse.Value.KeyId;
-            Console.WriteLine("OCSP signing certificate loaded.");
         }
         catch (Exception exception)
         {
@@ -69,7 +67,7 @@ public static class OcspServiceCollectionExtensions
 
         if (ekuExtension == null || !ekuExtension.EnhancedKeyUsages
                 .Cast<System.Security.Cryptography.Oid>()
-                .Any(oid => oid.Value == "1.3.6.1.5.5.7.3.9")) // id-kp-OCSPSigning
+                .Any(oid => oid.Value == WellKnownOids.ExtendedKeyUsages.OCSPSigning)) // id-kp-OCSPSigning
         {
             throw new InvalidOperationException(
                 $"OCSP signing certificate '{options.OcspSignerCertName}' must have " +
@@ -79,9 +77,8 @@ public static class OcspServiceCollectionExtensions
         try
         {
             // Load issuer certificate (root CA)
-            var issuerCertResponse = certClient
-                .GetCertificateAsync(options.IssuerCertName)
-                .GetAwaiter().GetResult();
+            var issuerCertResponse = await certClient
+                .GetCertificateAsync(options.IssuerCertName);
             issuerCert = X509CertificateLoader
                 .LoadCertificate(issuerCertResponse.Value.Cer);
             Console.WriteLine("Issuer certificate loaded.");
@@ -118,11 +115,12 @@ public static class OcspServiceCollectionExtensions
         });
 
         // Add health check for fail-fast behavior
+        var healthCheck = new OcspHealthCheck();
         services.AddHealthChecks()
-            .AddCheck<OcspHealthCheck>("ocsp_ready");
+            .AddCheck("ocsp_ready", healthCheck);
 
         // Mark health check as initialized
-        OcspHealthCheck.MarkInitialized();
+        healthCheck.MarkInitialized();
 
         return services;
     }
