@@ -1,0 +1,24 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/KeyVaultCa.Cli/KeyVaultCa.Cli.csproj" />
+    <Project Path="src/KeyVaultCa.Core/KeyVaultCa.Core.csproj" />
+    <Project Path="src/KeyVaultCa.Revocation.KeyVault/KeyVaultCa.Revocation.KeyVault.csproj" />
+    <Project Path="src/KeyVaultCa.Revocation.Ocsp.Hosting/KeyVaultCa.Revocation.Ocsp.Hosting.csproj" />
+    <Project Path="src/KeyVaultCa.Revocation.Tests/KeyVaultCa.Revocation.Tests.csproj" />
+    <Project Path="src/KeyVaultCa.Revocation/KeyVaultCa.Revocation.csproj" />
+    <Project Path="src/KeyVaultCa.Tests/KeyVaultCa.Tests.csproj" />
+  </Folder>
+  <Folder Name="/test/" />
+  <Folder Name="/test/mTLS/">
+    <File Path="test/mTLS/AppHost/AppHost.cs" />
+    <Project Path="test/mTLS/ApiServer/ApiServer.csproj" />
+    <Project Path="test/mTLS/ClientApp/ClientApp.csproj" />
+    <Project Path="test/mTLS/OcspResponder/OcspResponder.csproj" />
+    <Project Path="test/mTLS/ServiceDefaults/ServiceDefaults.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,14 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="../../src/KeyVaultCa.Core/KeyVaultCa.Core.csproj" />
+  <Project Path="../../src/KeyVaultCa.Revocation.Ocsp.Hosting/KeyVaultCa.Revocation.Ocsp.Hosting.csproj" />
+  <Project Path="../../src/KeyVaultCa.Revocation/KeyVaultCa.Revocation.csproj" />
+  <Project Path="ApiServer/ApiServer.csproj" />
+  <Project Path="ClientApp/ClientApp.csproj" />
+  <Project Path="OcspResponder/OcspResponder.csproj" />
+  <Project Path="ServiceDefaults/ServiceDefaults.csproj" />
+</Solution>
