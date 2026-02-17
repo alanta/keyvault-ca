@@ -206,6 +206,14 @@ public class CertificateStore
             version: cert.Version);
         props.Enabled = cert.Enabled;
         
+        // Certs with key are stored as PFX, but result should return only the cert
+        if (rawBytes is { Length: > 0 } &&
+            X509Certificate2.GetCertContentType(rawBytes) == X509ContentType.Pfx)
+        {
+            var pfx = X509CertificateLoader.LoadPkcs12(rawBytes, null);
+            rawBytes = pfx.Export(X509ContentType.Cert);
+        }
+        
         var result = CertificateModelFactory.KeyVaultCertificate(
             props,
             keyId: new Uri($"{VaultUri}keys/{cert.Name}/{cert.Version}"),
@@ -221,6 +229,15 @@ public class CertificateStore
             id: new Uri($"{VaultUri}certificates/{certName}/{version}"), 
             name: certName, 
             version: version);
+        
+        // Certs with key are stored as PFX, but result should return only the cert
+        if (rawBytes is { Length: > 0 } &&
+            X509Certificate2.GetCertContentType(rawBytes) == X509ContentType.Pfx)
+        {
+            var pfx = X509CertificateLoader.LoadPkcs12(rawBytes, null);
+            rawBytes = pfx.Export(X509ContentType.Cert);
+        }
+        
         var cert = CertificateModelFactory.KeyVaultCertificateWithPolicy(
             props,
             keyId: new Uri($"{VaultUri}keys/{certName}/{version}"),

@@ -1,5 +1,5 @@
 ﻿using Azure.Messaging;
-using FluentAssertions;
+using Shouldly;
 
 namespace KeyVaultCA.Tests
 {
@@ -12,15 +12,15 @@ namespace KeyVaultCA.Tests
         public static void ParseEvent()
         {
             var cloudEvent = CloudEvent.Parse(new BinaryData(eventGridEvent));
-            cloudEvent.Should().NotBeNull();
+            cloudEvent.ShouldNotBeNull();
 
-            cloudEvent!.Type.Should().Be("Microsoft.KeyVault.SecretNewVersionCreated");
+            cloudEvent!.Type.ShouldBe("Microsoft.KeyVault.SecretNewVersionCreated");
 
             var systemEvent = cloudEvent.Data!
                 .ToObjectFromJson<Azure.Messaging.EventGrid.SystemEvents.KeyVaultSecretNewVersionCreatedEventData>();
 
-            systemEvent.Should().NotBeNull();
-            systemEvent!.ObjectName.Should().Be("TestSecret");
+            systemEvent.ShouldNotBeNull();
+            systemEvent!.ObjectName.ShouldBe("TestSecret");
         }
 
         private static readonly string eventGridEvent =

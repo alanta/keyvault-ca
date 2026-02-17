@@ -1,0 +1,216 @@
+# KeyVaultCa.Revocation.Ocsp.Hosting
+
+A modern, easy-to-use ASP.NET Core hosting package for OCSP (Online Certificate Status Protocol) responders backed by Azure Key Vault.
+
+## Features
+
+- ✅ **Minimal setup**: 3 lines of code to get started
+- ✅ **RFC 6960 compliant**: Full OCSP protocol support via [OcspResponseBuilder](../KeyVaultCa.Revocation/OcspResponseBuilder.cs)
+- ✅ **Azure Key Vault integration**: Secure signing without local key material
+- ✅ **Fail-fast health checks**: Ensures certificates are loaded before accepting requests
+- ✅ **Modern ASP.NET Core**: Uses minimal APIs for better performance
+- ✅ **Both POST and GET**: Supports RFC 6960 standard POST and optional GET methods
+
+## Quick Start
+
+### 1. Add Package References
+
+```xml
+<!-- OCSP hosting with Azure Key Vault -->
+<PackageReference Include="KeyVaultCa.Revocation.Ocsp.Hosting" />
+
+<!-- Revocation store implementation (Key Vault tags) -->
+<PackageReference Include="KeyVaultCa.Revocation.KeyVault" />
+```
+
+**Note**: The hosting package is agnostic to the revocation store. You can use any `IRevocationStore` implementation.
+
+### 2. Configure in appsettings.json
+
+```json
+{
+  "OcspResponder": {
+    "KeyVaultUrl": "https://your-vault.vault.azure.net",
+    "OcspSignerCertName": "ocsp-signer",
+    "IssuerCertName": "root-ca",
+    "ResponseValidityMinutes": 1440
+  }
+}
+```
+
+### 3. Update Program.cs
+
+```csharp
+using KeyVaultCa.Revocation.Ocsp.Hosting;
+using KeyVaultCa.Revocation.KeyVault;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add OCSP responder with Azure Key Vault
+builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
+
+// Add revocation store (Key Vault tags implementation)
+builder.Services.AddKeyVaultRevocationStore(
+    builder.Configuration.GetValue<Uri>("OcspResponder:KeyVaultUrl")!);
+
+var app = builder.Build();
+
+// Map OCSP endpoints
+app.MapOcspResponder();
+
+await app.RunAsync();
+```
+
+That's it! Your OCSP responder is ready to handle certificate status requests.
+
+## Configuration Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `KeyVaultUrl` | Azure Key Vault URL (required) | - |
+| `OcspSignerCertName` | Name of OCSP signing certificate in Key Vault (must have id-kp-OCSPSigning EKU) | `ocsp-signer` |
+| `IssuerCertName` | Name of CA certificate in Key Vault | `root-ca` |
+| `ResponseValidityMinutes` | How long OCSP responses are valid (thisUpdate to nextUpdate) | `10` |
+
+## How It Works
+
+1. **Startup**: Loads OCSP signing and CA certificates from Azure Key Vault
+2. **Health Check**: Marks service as healthy only after certificates are loaded (fail-fast)
+3. **Request Handling**:
+   - Receives OCSP request (POST or GET)
+   - Extracts certificate serial number
+   - Queries revocation store
+   - Builds RFC 6960-compliant response
+   - Signs with Azure Key Vault
+   - Returns DER-encoded response
+
+## Endpoints
+
+- **POST /**: Standard OCSP request (content-type: `application/ocsp-request`)
+- **GET /{base64Request}**: Optional GET method with base64-encoded request (RFC 6960 Appendix A.1)
+- **GET /health**: Health check endpoint (requires adding `app.MapHealthChecks("/health")`)
+
+## Azure Permissions Required
+
+The Azure identity (managed identity, service principal, or user) must have:
+
+- **Key Vault**: `Certificates Reader` and `Crypto User` roles
+
+## Example: Using with .NET Aspire
+
+```csharp
+// Program.cs
+using KeyVaultCa.Revocation.Ocsp.Hosting;
+using KeyVaultCa.Revocation.KeyVault;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.AddServiceDefaults(); // Aspire defaults
+
+builder.Services.AddKeyVaultOcspResponder(builder.Configuration);
+builder.Services.AddKeyVaultRevocationStore(
+    builder.Configuration.GetValue<Uri>("OcspResponder:KeyVaultUrl")!);
+
+var app = builder.Build();
+
+app.MapOcspResponder();
+app.MapDefaultEndpoints(); // Aspire endpoints
+
+await app.RunAsync();
+```
+
+See [test/mTLS/OcspResponder](../../test/mTLS/OcspResponder/) for a complete working example.
+
+## Architecture
+
+This package is part of the KeyVaultCa toolkit:
+
+```
+┌─────────────────────────────────────────┐
+│  KeyVaultCa.Revocation.Ocsp.Hosting     │  ← This package (ASP.NET Core hosting)
+│  - OcspServiceCollectionExtensions      │
+│  - OcspEndpointExtensions               │
+│  - OcspHealthCheck                      │
+└─────────────────────────────────────────┘
+              ↓ depends on
+┌─────────────────────────────────────────┐
+│  KeyVaultCa.Revocation                  │  ← Core OCSP logic
+│  - OcspResponseBuilder (RFC 6960)       │
+│  - IRevocationStore                     │
+└─────────────────────────────────────────┘
+              ↓ depends on
+┌─────────────────────────────────────────┐
+│  KeyVaultCa.Core                        │  ← Key Vault integration
+│  - KeyVaultSignatureGenerator           │
+└─────────────────────────────────────────┘
+```
+
+## Performance: Automatic Caching
+
+The revocation store implementation (e.g., `AddKeyVaultRevocationStore`) automatically includes **HybridCache** for optimal performance with zero configuration required.
+
+### Performance Impact
+
+- **Without cache**: ~50-200ms per request (Key Vault lookup + signing)
+- **With cache hit**: ~10-50ms (Key Vault signing only, revocation lookup cached)
+- **Cache TTL**: 10 minutes (automatic)
+
+### How It Works
+
+Caching is implemented using the **decorator pattern** at the revocation store level:
+
+1. `KeyVaultRevocationStore` handles Azure Key Vault certificate tag operations
+2. `CachedRevocationStore` wraps it with HybridCache
+3. Certificate revocation lookups are cached by serial number
+4. **Stampede protection** prevents multiple concurrent requests from hitting Key Vault
+
+### Key Benefits
+
+✅ **Automatic**: No configuration needed, caching is enabled by default
+✅ **RFC 6960 compliant**: Each OCSP response is freshly signed (no response caching)
+✅ **Stampede protection**: HybridCache prevents cache stampedes under high load
+✅ **Cache invalidation**: Automatic when certificates are revoked
+
+### Cache Behavior
+
+**Cached**:
+- Certificate revocation status lookups (by serial number)
+- Both "revoked" and "not revoked" states
+
+**Not Cached**:
+- OCSP response signing (each response is unique with nonce + timestamps)
+- Certificate issuer validation
+
+**Cache Invalidation**:
+- When a certificate is revoked via `IRevocationStore.AddRevocationAsync()`
+- Automatic TTL expiration after 10 minutes
+
+This approach balances performance with RFC 6960 requirements for fresh signatures and nonce handling.
+
+## Troubleshooting
+
+### Service fails at startup with "Key Vault URL not configured"
+
+Ensure `OcspResponder:KeyVaultUrl` is set in appsettings.json or environment variables.
+
+### Health check shows "unhealthy"
+
+This means certificates failed to load from Key Vault. Check:
+- Key Vault URL is correct
+- Certificate names exist in Key Vault
+- Azure identity has proper permissions
+- Network connectivity to Key Vault
+
+### Build error: "X509CertificateLoader does not exist"
+
+This package requires .NET 10.0 or later. Update your project's `<TargetFramework>` to `net10.0`.
+
+## Related Packages
+
+- **[KeyVaultCa.Revocation](../KeyVaultCa.Revocation/)**: Core OCSP response building logic
+- **[KeyVaultCa.Revocation.KeyVault](../KeyVaultCa.Revocation.KeyVault/)**: Key Vault certificate tags revocation store (recommended)
+- **[KeyVaultCa.Core](../KeyVaultCa.Core/)**: Azure Key Vault signing and certificate operations
+
+## License
+
+See the repository root for license information.

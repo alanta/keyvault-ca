@@ -51,14 +51,15 @@ namespace KeyVaultCa.Core
         }
         
         public async Task IssueIntermediateCertificate(
-            KeyVaultSecretReference issuerCertificate, 
-            KeyVaultSecretReference certificate, 
-            string subject, 
-            DateTimeOffset notBefore, 
-            DateTimeOffset notAfter, 
+            KeyVaultSecretReference issuerCertificate,
+            KeyVaultSecretReference certificate,
+            string subject,
+            DateTimeOffset notBefore,
+            DateTimeOffset notAfter,
             SubjectAlternativeNames sans,
-            int? certPathLength, 
-            CancellationToken ct)
+            int? certPathLength,
+            RevocationConfig? revocationConfig = null,
+            CancellationToken ct = default)
         {
             try
             {
@@ -86,19 +87,22 @@ namespace KeyVaultCa.Core
                 notAfter,
                 sans,
                 certPathLength,
+                revocationConfig,
                 ct);
             _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created successfully.", certificate.SecretName, certPathLength);
             
         }
         
         public async Task IssueCertificate(
-            KeyVaultSecretReference issuerCertificate, 
-            KeyVaultSecretReference certificate, 
-            string subject, 
-            DateTimeOffset notBefore, 
-            DateTimeOffset notAfter, 
+            KeyVaultSecretReference issuerCertificate,
+            KeyVaultSecretReference certificate,
+            string subject,
+            DateTimeOffset notBefore,
+            DateTimeOffset notAfter,
             SubjectAlternativeNames sans,
-            CancellationToken ct)
+            RevocationConfig? revocationConfig = null,
+            bool ocspSigning = false,
+            CancellationToken ct = default)
         {
             try
             {
@@ -109,7 +113,7 @@ namespace KeyVaultCa.Core
                 }
                 else
                 {
-                    
+
                     _logger.LogInformation("No existing certificate found, starting to create a new one.");
                 }
             }
@@ -126,6 +130,8 @@ namespace KeyVaultCa.Core
                 notBefore,
                 notAfter,
                 sans,
+                revocationConfig,
+                ocspSigning,
                 ct);
         }
     }

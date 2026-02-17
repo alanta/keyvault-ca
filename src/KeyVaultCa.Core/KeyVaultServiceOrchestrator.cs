@@ -132,6 +132,9 @@ namespace KeyVaultCa.Core
                     new MergeCertificateOptions(id, [signedcert.Export(X509ContentType.Pkcs12)]);
                 var mergeResult = await certificateClient.MergeCertificateAsync(options, ct);
 
+                // Add serial number tag for revocation lookups
+                await AddSerialNumberTagAsync(certificateClient, id, signedcert, ct);
+
                 return signedcert;
             }
             catch (Exception ex)
@@ -229,6 +232,7 @@ namespace KeyVaultCa.Core
             Func<Uri, CertificateClient> keyVaultClientFactory,
             Func<Uri, CryptographyClient> cryptoClientFactory,
             IReadOnlyList<X509Extension>? extensions = null,
+            RevocationConfig? revocationConfig = null,
             CancellationToken ct = default)
         {
             if (!KeyVaultCertificateIdentifier.TryCreate(certificateUri, out var csrCertificateIdentifier))
@@ -269,7 +273,7 @@ namespace KeyVaultCa.Core
                 throw new ArgumentException("Issuer certificate not found.");
             }
 
-            var signingCert = new X509Certificate2(certBundle.Value.Cer);
+            var signingCert = X509CertificateLoader.LoadCertificate(certBundle.Value.Cer);
 
             return await CertificateFactory.SignRequest(
                 csrOperation.Properties.Csr,
@@ -279,19 +283,21 @@ namespace KeyVaultCa.Core
                 notBefore,
                 notAfter,
                 HashAlgorithmName.SHA256,
-                extensions, 
+                extensions,
+                revocationConfig,
                 ct);
         }
 
         public async Task IssueIntermediateCertificateAsync(
-            KeyVaultSecretReference issuerCertificate, 
-            KeyVaultSecretReference certificate, 
-            string subject, 
+            KeyVaultSecretReference issuerCertificate,
+            KeyVaultSecretReference certificate,
+            string subject,
             DateTimeOffset notBefore,
             DateTimeOffset notAfter,
             SubjectAlternativeNames sans,
             int? pathLength,
-            CancellationToken ct)
+            RevocationConfig? revocationConfig = null,
+            CancellationToken ct = default)
         {
             var certificateClient = _certificateClientFactory(certificate.KeyVaultUrl);
             var startOperation = await CheckForPendingOperations(certificateClient, certificate.SecretName, ct);
@@ -314,19 +320,25 @@ namespace KeyVaultCa.Core
                     new X509KeyUsageExtension(X509KeyUsageFlags.CrlSign | X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.DigitalSignature, true),
                     new X509EnhancedKeyUsageExtension(new OidCollection(){ new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) }, false)
                 ],
+                revocationConfig,
                 ct);
             await certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificate.SecretName,
                 [signedCert2.RawData]), ct);
+            
+            // Add serial number tag for revocation lookups
+            await AddSerialNumberTagAsync(certificateClient, certificate.SecretName, signedCert2, ct);
         }
 
         public async Task IssueCertificateAsync(
-            KeyVaultSecretReference issuerCertificate, 
+            KeyVaultSecretReference issuerCertificate,
             KeyVaultSecretReference certificate,
-            string subject, 
+            string subject,
             DateTimeOffset notBefore,
             DateTimeOffset notAfter,
             SubjectAlternativeNames sans,
-            CancellationToken ct)
+            RevocationConfig? revocationConfig = null,
+            bool ocspSigning = false,
+            CancellationToken ct = default)
         {
             var certificateClient = _certificateClientFactory(certificate.KeyVaultUrl);
             var startOperation = await CheckForPendingOperations(certificateClient, certificate.SecretName, ct);
@@ -337,6 +349,26 @@ namespace KeyVaultCa.Core
                     new CertificatePolicy("Unknown", subject, sans), cancellationToken: ct);
             }
 
+            var extensionsList = new List<X509Extension>
+            {
+                new X509BasicConstraintsExtension(false, false, 0, true),
+                new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true)
+            };
+
+            if (ocspSigning)
+            {
+                // RFC 6960 requires the OCSP Signing EKU extension to be marked as critical
+                extensionsList.Add(new X509EnhancedKeyUsageExtension(
+                    new OidCollection { new Oid(WellKnownOids.ExtendedKeyUsages.OCSPSigning) },
+                    critical: true));
+            }
+            else
+            {
+                extensionsList.Add(new X509EnhancedKeyUsageExtension(
+                    new OidCollection { new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) },
+                    critical: false));
+            }
+
             var signedCert2 = await SignRequestAsync(
                 certificate.CertificateUri,
                 issuerCertificate.CertificateUri,
@@ -344,14 +376,14 @@ namespace KeyVaultCa.Core
                 notAfter,
                 _certificateClientFactory,
                 _cryptoClientFactory,
-                extensions: [
-                    new X509BasicConstraintsExtension(false, false, 0, true),
-                    new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true),
-                    new X509EnhancedKeyUsageExtension(new OidCollection(){ new Oid(WellKnownOids.ExtendedKeyUsages.ServerAuth), new Oid(WellKnownOids.ExtendedKeyUsages.ClientAuth) }, false)
-                ],
+                extensions: extensionsList,
+                revocationConfig,
                 ct);
             await certificateClient.MergeCertificateAsync(new MergeCertificateOptions(certificate.SecretName,
                 [signedCert2.RawData]), ct);
+            
+            // Add serial number tag for revocation lookups
+            await AddSerialNumberTagAsync(certificateClient, certificate.SecretName, signedCert2, ct);
         }
 
         /// <summary>
@@ -389,6 +421,42 @@ namespace KeyVaultCa.Core
             }
 
             return startOperation;
+        }
+
+        /// <summary>
+        /// Adds the serial number as a tag to the certificate for efficient revocation lookups.
+        /// </summary>
+        /// <param name="client">Certificate client</param>
+        /// <param name="certificateName">Name of the certificate</param>
+        /// <param name="certificate">The X509Certificate2 containing the serial number</param>
+        /// <param name="ct">Cancellation token</param>
+        private async Task AddSerialNumberTagAsync(
+            CertificateClient client, 
+            string certificateName, 
+            X509Certificate2 certificate,
+            CancellationToken ct)
+        {
+            try
+            {
+                var serialNumber = SerialNumberHelper.Normalize(certificate.SerialNumber);
+                _logger.LogDebug("Adding serial number tag {serial} to certificate {name}", serialNumber, certificateName);
+
+                var certResponse = await client.GetCertificateAsync(certificateName, ct);
+                var properties = certResponse.Value.Properties;
+                
+                // Add serial number tag if not already present
+                if (!properties.Tags.ContainsKey("SerialNumber"))
+                {
+                    properties.Tags["SerialNumber"] = serialNumber;
+                    await client.UpdateCertificatePropertiesAsync(properties, ct);
+                    _logger.LogInformation("Added serial number tag {serial} to certificate {name}", serialNumber, certificateName);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail the operation if tagging fails
+                _logger.LogWarning(ex, "Failed to add serial number tag to certificate {name}", certificateName);
+            }
         }
     }
 }

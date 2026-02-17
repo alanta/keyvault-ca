@@ -68,7 +68,7 @@ namespace KeyVaultCa.Core
             return SignDataAsync(data, hashAlgorithm, CancellationToken.None).GetAwaiter().GetResult();
         }
 
-        public Task<byte[]> SignDataAsync(byte[] data, HashAlgorithmName hashAlgorithm, CancellationToken ct)
+        public virtual Task<byte[]> SignDataAsync(byte[] data, HashAlgorithmName hashAlgorithm, CancellationToken ct)
         {
             HashAlgorithm hash;
             if (hashAlgorithm == HashAlgorithmName.SHA256)

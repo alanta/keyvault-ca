@@ -10,8 +10,8 @@ on:
   workflow_dispatch:
 
 env:
-  DOTNET_VERSION: '8.0.x'
-  SOLUTION_FILE: offline-ca.sln
+  DOTNET_VERSION: '10.0.x'
+  SOLUTION_FILE: keyvault-ca.sln
 
 jobs:
   build-test:
@@ -21,15 +21,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "📥 Checkout"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: "🛠️ Setup .NET"
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: "📦 Cache NuGet packages"
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
@@ -54,17 +54,26 @@ jobs:
 
       - name: "⬆️ Upload test results"
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-results
           path: coverage
           if-no-files-found: warn
 
+      - name: "🔀 Merge coverage reports"
+        if: always()
+        run: |
+          dotnet tool install -g dotnet-reportgenerator-globaltool
+          reportgenerator \
+            -reports:coverage/*/coverage.cobertura.xml \
+            -targetdir:coverage/merged \
+            -reporttypes:Cobertura
+
       - name: "📈 Coverage summary"
         if: always()
         uses: irongut/CodeCoverageSummary@v1.3.0
         with:
-          filename: coverage/*/coverage.cobertura.xml
+          filename: coverage/merged/Cobertura.xml
           badge: true
           format: markdown
           output: both

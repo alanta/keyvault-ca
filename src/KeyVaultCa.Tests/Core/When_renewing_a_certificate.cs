@@ -3,7 +3,7 @@ using System.Security.Cryptography.X509Certificates;
 using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Keys.Cryptography;
 using FakeItEasy;
-using FluentAssertions;
+using Shouldly;
 using KeyVaultCa.Core;
 using KeyVaultCA.Tests.KeyVault;
 using KeyVaultCA.Tests.Tools;
@@ -37,16 +37,17 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
 
         await kvCertProvider.IssueCertificate(
             new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestCA"),
-            new KeyVaultSecretReference(certificateOperations.VaultUri, "RenewMe"), 
-            "CN=test.local", 
-            today, 
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "RenewMe"),
+            "CN=test.local",
+            today,
             today.AddDays(30),
             new SubjectAlternativeNames()
             {
                 DnsNames = { "test.local" }
-            }, 
-            ct);
-        ;
+            },
+            revocationConfig: null,
+            ct:ct);
+        
         // Act
         // Re-issue the leaf cert
         // It should keep all extensions but update the validity period.
@@ -55,7 +56,7 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
         // Load the existing certificate from keyvault
         await kvServiceClient.IssueCertificateAsync(
             new KeyVaultSecretReference(certificateOperations.VaultUri, "UnitTestCA"),
-            new KeyVaultSecretReference(certificateOperations.VaultUri, "RenewMe"), 
+            new KeyVaultSecretReference(certificateOperations.VaultUri, "RenewMe"),
             "CN=test.local",
             today.AddDays(30),
             today.AddDays(60),
@@ -63,7 +64,8 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
             {
                 DnsNames = { "test.local" }
             },
-            ct);
+            revocationConfig: null,
+            ct: ct);
 
         /*await kvCertProvider.RenewCertificateAsync(
             "RenewMe",
@@ -74,9 +76,9 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
         // Verify
         // Validity period starts after previous version
         var renewedCert = await certificateClient.GetCertificateAsync("RenewMe", ct);
-        var x509Renewed = new X509Certificate2(renewedCert.Value.Cer);
-        x509Renewed.NotBefore.Should().Be(today.AddDays(30));
-        x509Renewed.NotAfter.Should().Be(today.AddDays(60));
+        var x509Renewed = X509CertificateLoader.LoadCertificate(renewedCert.Value.Cer);
+        x509Renewed.NotBefore.ShouldBe(today.AddDays(30));
+        x509Renewed.NotAfter.ShouldBe(today.AddDays(60));
     }
 
     [Fact]
@@ -122,14 +124,15 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
             {
                 DnsNames = { "test.local" }
             },
-            ct);
+            revocationConfig: null,
+            ct:ct);
 
         // Assert
-        await issueTask.Should().NotThrowAsync("pending operations from other issuers should be cancelled before issuing");
+        await issueTask.ShouldNotThrowAsync("pending operations from other issuers should be cancelled before issuing");
 
         var versions = certificateStore.CertificateVersions.Where(v => v.Name == "RenewMe").ToList();
-        versions.Should().HaveCount(1);
-        versions[0].HasCompleted.Should().BeTrue();
+        versions.Count.ShouldBe(1);
+        versions[0].HasCompleted.ShouldBeTrue();
     }
     
     [Fact]
@@ -161,7 +164,7 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
         await certificateClient.StartCreateCertificateAsync("RenewMe", pendingPolicy, true, null, ct);
 
         var pendingVersion = certificateStore.CertificateVersions.Single(v => v.Name == "RenewMe");
-        pendingVersion.HasCompleted.Should().BeFalse();
+        pendingVersion.HasCompleted.ShouldBeFalse();
 
         // Act
         Func<Task> issueTask = () => kvCertProvider.IssueCertificate(
@@ -174,14 +177,15 @@ public class When_renewing_a_certificate(ITestOutputHelper output)
             {
                 DnsNames = { "test.local" }
             },
-            ct);
+            revocationConfig: null,
+            ct:ct);
 
         // Assert
-        await issueTask.Should().NotThrowAsync("pending operations with issuer Unknown should be continued");
+        await issueTask.ShouldNotThrowAsync("pending operations with issuer Unknown should be continued");
 
         var versions = certificateStore.CertificateVersions.Where(v => v.Name == "RenewMe").ToList();
-        versions.Should().HaveCount(1, "continuing should reuse the existing pending operation");
-        versions[0].HasCompleted.Should().BeTrue();
-        versions[0].Certificate.Should().NotBeNull();
+        versions.Count.ShouldBe(1, "continuing should reuse the existing pending operation");
+        versions[0].HasCompleted.ShouldBeTrue();
+        versions[0].Certificate.ShouldNotBeNull();
     }
 }

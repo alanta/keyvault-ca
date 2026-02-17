@@ -1,4 +1,5 @@
-﻿using Azure;
+﻿using System.Security.Cryptography.X509Certificates;
+using Azure;
 using Azure.Security.KeyVault.Certificates;
 using FakeItEasy;
 
@@ -61,7 +62,13 @@ public static class MockKeyVault
                 var operation = certificates.StartOperation(name, policy);
                 return Response.FromValue(operation, MockResponse.Ok());
             });
-
+        A.CallTo(() => certificateClient.StartCreateCertificateAsync(A<string>._, A<CertificatePolicy>._,
+                A<bool?>._, A<IDictionary<string, string>>._, A<bool?>._, A<CancellationToken>._))
+            .ReturnsLazily((string name, CertificatePolicy policy, bool? _, IDictionary<string, string>? _, bool? _, CancellationToken _) =>
+            {
+                var operation = certificates.StartOperation(name, policy);
+                return Response.FromValue(operation, MockResponse.Ok());
+            });
         return certificateClient;
     }
 
@@ -74,6 +81,14 @@ public static class MockKeyVault
                 var cert = certificates.GetCertificateByName(name);
                 if( cert == null)
                     throw new RequestFailedException(404, "Not Found");
+                
+                var certFormat = X509Certificate2.GetCertContentType(cert.Cer);
+                if( certFormat == X509ContentType.Pfx )
+                {
+                    var pfx = X509CertificateLoader.LoadPkcs12(cert.Cer, null);
+                    var model = CertificateModelFactory.KeyVaultCertificateWithPolicy(cert.Properties, cert.KeyId, cert.SecretId, pfx.Export(X509ContentType.Cert));
+                    return Response.FromValue(model, MockResponse.Ok());
+                }
 
                 return Response.FromValue(cert, MockResponse.Ok());
                 

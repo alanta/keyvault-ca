@@ -2,7 +2,7 @@
 
 This repository contains a .NET library and CLI that help you run a small Certificate Authority entirely inside Azure Key Vault. All key material stays in Key Vault; the tooling orchestrates certificate creation, issuance, and renewal by driving the Key Vault APIs for you.
 
-Today the toolset covers the basics needed for internal mTLS deployments: create a root CA, issue intermediates or end-entity certificates (across multiple vaults if desired), renew existing certs, and download PEM/PKCS8 material for distribution. Features such as certificate revocation, PKCS12 export, and automated renewal workers are still on the backlog, and the README calls out workarounds where needed (for example, building a certificate chain manually).
+Today the toolset covers the basics needed for internal mTLS deployments: create a root CA, issue intermediates or end-entity certificates (across multiple vaults if desired), renew existing certs, and download certificates in PEM or PFX (PKCS#12) format for distribution. Features such as certificate revocation and automated renewal workers are still on the backlog, and the README calls out workarounds where needed (for example, building a certificate chain manually).
 
 Typical scenarios include:
 * Application Gateway needs to communicate with Azure API Management using mTLS
@@ -98,18 +98,23 @@ After the intermediate is created, use it as the `--issuer` when issuing your le
 
 ### Download the certificates
 
-Use `download-cert` when you need to export a PEM (and optionally the private key) from Key Vault. The command always writes `<name>.pem`; pass `--key` if you also need `<name>.key` (RSA only for now).
+Use `download-cert` when you need to export certificates from Key Vault. By default, it exports PEM format; use `--key` to also get the private key, or `--pfx` to export PKCS12 format with the private key included.
 
 ```bash
-# Export just the certificate
+# Export just the certificate (PEM)
 keyvaultca download-cert --key-vault my-certs-keyvault device1
 
 # Export the certificate plus the private key (PEM PKCS8)
 keyvaultca download-cert --key-vault my-certs-keyvault --key device1
 
-# Full vault URI works too
+# Export as PFX (PKCS12) with certificate and private key
+keyvaultca download-cert --key-vault my-certs-keyvault --pfx device1
 
-keyvaultca download-cert --key-vault https://my-certs-keyvault.vault.azure.net/ device1
+# Export as PFX with password protection
+keyvaultca download-cert --key-vault my-certs-keyvault --pfx --pfx-password "MySecurePassword" device1
+
+# Full vault URI works too
+keyvaultca download-cert --key-vault https://my-certs-keyvault.vault.azure.net/ --pfx device1
 ```
 
 The files land in the current directory; move them into your chain/keystore workflow as needed.
@@ -129,10 +134,16 @@ The CLI doesn’t build a full PEM bundle yet, but you can assemble one manually
 
 3. Use the combined file anywhere a full chain is required (App Gateway, MQTT broker, etc.).
 
-If you also need PKCS12 (`.pfx`), use OpenSSL locally for now:
+If you also need a PKCS12 (`.pfx`) bundle with the full chain, download each certificate separately and combine them with OpenSSL:
 
 ```bash
-openssl pkcs12 -export -out device1.pfx -inkey device1.key -in device1.pem -certfile intermediate-ca.pem -certfile root-ca.pem
+# Download the certificates
+keyvaultca download-cert --key-vault my-certs-keyvault --pfx device1
+keyvaultca download-cert --key-vault my-intermediate-vault intermediate-ca
+keyvaultca download-cert --key-vault my-ca-keyvault root-ca
+
+# Build the chain bundle
+openssl pkcs12 -export -out device1-chain.pfx -in device1.pfx -certfile intermediate-ca.pem -certfile root-ca.pem
 ```
 
 > **Required permissions**: whatever was needed to download the individual certificates (Secrets User on each vault). The concatenation/OpenSSL steps run locally.
