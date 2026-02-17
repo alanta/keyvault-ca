@@ -289,7 +289,7 @@ az keyvault certificate delete --vault-name your-keyvault-name --name api-client
 ```
 test/mTLS/
 ├── README.md                           # This file
-├── mTls.sln                            # Solution file
+├── mTls.slnx                           # Solution file
 ├── AppHost/                            # .NET Aspire orchestration
 │   └── AppHost.cs                      # Aspire app host (file-scoped program)
 ├── ServiceDefaults/                    # Shared Aspire service configuration

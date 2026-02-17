@@ -36,9 +36,9 @@ KeyVaultCa.Cli                    ← CLI tool (depends on all above)
 ## Build and Test
 
 ```bash
-dotnet build keyvault-ca.sln
-dotnet test keyvault-ca.sln
-dotnet build test/mTLS/mTls.sln          # Aspire-based end-to-end test
+dotnet build keyvault-ca.slnx
+dotnet test keyvault-ca.slnx
+dotnet build test/mTLS/mTls.slnx          # Aspire-based end-to-end test
 ```
 
 ## Test Conventions

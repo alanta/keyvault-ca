@@ -11,7 +11,7 @@ on:
 
 env:
   DOTNET_VERSION: '10.0.x'
-  SOLUTION_FILE: keyvault-ca.sln
+  SOLUTION_FILE: keyvault-ca.slnx
 
 jobs:
   build-test:
