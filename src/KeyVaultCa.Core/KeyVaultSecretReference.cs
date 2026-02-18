@@ -118,6 +118,16 @@ public class KeyVaultSecretReference
     }
 
     /// <summary>
+    /// Returns true if <paramref name="name"/> is a valid Azure Key Vault certificate/secret name:
+    /// 1–127 characters, must start with a letter, and contain only letters, digits, and hyphens.
+    /// </summary>
+    public static bool IsValidCertificateName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        return System.Text.RegularExpressions.Regex.IsMatch(name, @"^[a-zA-Z][a-zA-Z0-9\-]{0,126}$");
+    }
+
+    /// <summary>
     /// The name of the Key Vault secret.
     /// </summary>
     public string SecretName { get; private init; }

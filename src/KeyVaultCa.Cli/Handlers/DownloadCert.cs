@@ -1,6 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
 using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
+using KeyVaultCa.Cli.Validators;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -121,7 +122,7 @@ public class DownloadCert(ILoggerFactory loggerFactory)
         var pfxOption = cmd.Option("-p|--pfx", "Export as PFX (PKCS#12) format (use with --key to include private key)", CommandOptionType.NoValue);
         var pfxPasswordOption = cmd.Option("-pw|--pfx-password <PASSWORD>", "Password to protect the PFX file (optional)", CommandOptionType.SingleValue);
         var noPasswordOption = cmd.Option("-np|--no-password", "Skip password prompt and create unprotected PFX (for automation)", CommandOptionType.NoValue);
-        var nameArgument = cmd.Argument<string>("name", "The name of the certificate").IsRequired();
+        var nameArgument = cmd.Argument<string>("name", "The name of the certificate").IsRequired().AcceptsKeyVaultName();
         
         cmd.OnExecuteAsync(async cancellationToken =>
         {

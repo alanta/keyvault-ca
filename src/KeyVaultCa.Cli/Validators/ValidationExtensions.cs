@@ -15,4 +15,10 @@ public static class ValidationExtensions
         option.Validators.Add(new DurationOptionValidator());
         return option;
     }
+
+    public static CommandArgument<string> AcceptsKeyVaultName(this CommandArgument<string> argument)
+    {
+        argument.Validators.Add(new KeyVaultNameArgumentValidator());
+        return argument;
+    }
 }

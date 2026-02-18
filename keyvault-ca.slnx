@@ -6,6 +6,7 @@
   </Configurations>
   <Folder Name="/src/">
     <Project Path="src/KeyVaultCa.Cli/KeyVaultCa.Cli.csproj" />
+    <Project Path="src/KeyVaultCa.Cli.Tests/KeyVaultCa.Cli.Tests.csproj" />
     <Project Path="src/KeyVaultCa.Core/KeyVaultCa.Core.csproj" />
     <Project Path="src/KeyVaultCa.Revocation.KeyVault/KeyVaultCa.Revocation.KeyVault.csproj" />
     <Project Path="src/KeyVaultCa.Revocation.Ocsp.Hosting/KeyVaultCa.Revocation.Ocsp.Hosting.csproj" />
