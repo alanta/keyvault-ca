@@ -9,6 +9,9 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>12</LangVersion>
+    <IsPackable>true</IsPackable>
+    <Description>Core Azure Key Vault CA library for certificate issuance and management.</Description>
+    <PackageTags>azure;keyvault;pki;ca;certificates</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

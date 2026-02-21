@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace KeyVaultCa.Cli.Handlers;
 
-public class DownloadCert(ILoggerFactory loggerFactory)
+public class DownloadCert
 {
     public async Task<int> Execute(string keyVault, string name, bool key, bool pfx, string? pfxPassword, bool noPassword, CancellationToken cancellationToken)
     {
@@ -126,7 +126,7 @@ public class DownloadCert(ILoggerFactory loggerFactory)
         
         cmd.OnExecuteAsync(async cancellationToken =>
         {
-            var handler = new DownloadCert(CliApp.ServiceProvider.GetRequiredService<ILoggerFactory>());
+            var handler = new DownloadCert();
             return await handler.Execute(kvOption.Value()!, nameArgument.Value!, keyOption.HasValue(), pfxOption.HasValue(), pfxPasswordOption.Value(), noPasswordOption.HasValue(), cancellationToken);
         });
     }

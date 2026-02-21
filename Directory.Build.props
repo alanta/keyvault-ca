@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <Authors>Alanta</Authors>
+    <Company>Alanta</Company>
+    <Copyright>Copyright © Alanta / Marnix van Valen</Copyright>
+    <PackageLicenseExpression>Elastic-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/alanta/keyvault-ca</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/alanta/keyvault-ca</PackageProjectUrl>
+    <!-- Packaging is opt-in; library projects must set IsPackable=true explicitly -->
+    <IsPackable>false</IsPackable>
+    <!-- All packages land in a single folder for easy artifact upload -->
+    <PackageOutputPath>$(MSBuildThisFileDirectory)nupkg</PackageOutputPath>
+  </PropertyGroup>
+</Project>
