@@ -9,3 +9,6 @@
 - [ ] Docs updated or confirmed not needed
 - [ ] CI passes locally (`dotnet build` / `dotnet test`)
 - [ ] Security and privacy considerations reviewed
+
+## Optional tasks
+- [ ] Publish preview NuGet packages
