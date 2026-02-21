@@ -67,7 +67,7 @@ jobs:
         run: |
           dotnet pack ${{ env.SOLUTION_FILE }} \
             --configuration Release \
-            -p:Version=${{ steps.gitversion.outputs.nuGetVersionV2 }} \
+            -p:Version=${{ steps.gitversion.outputs.semVer }} \
             --output ./nupkg
           dotnet nuget push ./nupkg/*.nupkg \
             --api-key ${{ secrets.FEEDZ_API_KEY }} \
