@@ -10,6 +10,7 @@ public class CliApp
     
     public static void Configure(CommandLineApplication app)
     {
+        app.FullName = "KeyVault CA CLI";
         app.Name = "keyvaultca";
         app.Description = "A tool for managing a certificate authority in Azure Key Vault";
         app.ValueParsers.AddOrReplace(new TimeSpanValueParser());
@@ -21,6 +22,7 @@ public class CliApp
         app.Command("backfill-serial-tags", BackfillSerialTags.Configure);
         app.Command("revoke-cert", RevokeCert.Configure);
         app.Command("generate-crl", GenerateCrl.Configure);
+        app.VersionOptionFromAssemblyAttributes(Assembly.GetExecutingAssembly());
         app.OnExecute(() =>
         {
             app.ShowHelp();
