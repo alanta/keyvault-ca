@@ -11,7 +11,12 @@
         <IsPackable>true</IsPackable>
         <Description>CLI tool for managing certificates via Azure Key Vault CA.</Description>
         <PackageTags>azure;keyvault;pki;ca;certificates;cli;tool</PackageTags>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
+
+    <ItemGroup>
+      <None Include="README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
 
     <ItemGroup>
       <PackageReference Include="McMaster.Extensions.Hosting.CommandLine" />
