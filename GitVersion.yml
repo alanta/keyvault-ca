@@ -1,5 +1,2 @@
 workflow: GitHubFlow/v1
-next-version: 0.1.0
-branches:
-  main:
-    deployment-mode: ContinuousDeployment
+mode: ContinuousDelivery
