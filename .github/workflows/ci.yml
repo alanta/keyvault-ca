@@ -67,7 +67,6 @@ jobs:
         run: |
           dotnet pack ${{ env.SOLUTION_FILE }} \
             --configuration Release \
-            --no-build \
             -p:Version=${{ steps.gitversion.outputs.nuGetVersionV2 }} \
             --output ./nupkg
           dotnet nuget push ./nupkg/*.nupkg \
