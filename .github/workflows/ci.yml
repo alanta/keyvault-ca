@@ -22,6 +22,19 @@ jobs:
     steps:
       - name: "📥 Checkout"
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: "🔢 Install GitVersion"
+        uses: gittools/actions/gitversion/setup@v3
+        with:
+          versionSpec: '6.x'
+
+      - name: "🔢 Calculate version"
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v3
+        with:
+          useConfigFile: true
 
       - name: "🛠️ Setup .NET"
         uses: actions/setup-dotnet@v5
@@ -51,6 +64,18 @@ jobs:
             --collect "XPlat Code Coverage" \
             --logger "trx;LogFileName=test-results.trx" \
             --results-directory coverage
+
+      - name: "📦 Pack & publish NuGet packages"
+        run: |
+          dotnet pack ${{ env.SOLUTION_FILE }} \
+            --configuration Release \
+            --no-build \
+            -p:Version=${{ steps.gitversion.outputs.nuGetVersionV2 }} \
+            --output ./nupkg
+          dotnet nuget push ./nupkg/*.nupkg \
+            --api-key ${{ secrets.FEEDZ_API_KEY }} \
+            --source https://f.feedz.io/alanta/keyvault-ca/nuget/index.json \
+            --skip-duplicate
 
       - name: "⬆️ Upload test results"
         if: always()

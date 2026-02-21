@@ -8,7 +8,9 @@
 
         <PackAsTool>true</PackAsTool>
         <ToolCommandName>keyvaultca</ToolCommandName>
-        <PackageOutputPath>./nupkg</PackageOutputPath>
+        <IsPackable>true</IsPackable>
+        <Description>CLI tool for managing certificates via Azure Key Vault CA.</Description>
+        <PackageTags>azure;keyvault;pki;ca;certificates;cli;tool</PackageTags>
     </PropertyGroup>
 
     <ItemGroup>

@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>12</LangVersion>
+    <IsPackable>true</IsPackable>
+    <Description>ASP.NET Core hosting extensions for the KeyVaultCa OCSP responder.</Description>
+    <PackageTags>azure;keyvault;pki;revocation;ocsp;aspnetcore</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
