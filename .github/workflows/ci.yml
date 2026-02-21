@@ -16,7 +16,7 @@ env:
 jobs:
   build-test:
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     runs-on: ubuntu-latest
     steps:
@@ -64,6 +64,9 @@ jobs:
             --results-directory coverage
 
       - name: "📦 Pack & publish NuGet packages"
+        if: |
+          github.event_name != 'pull_request' ||
+          contains(github.event.pull_request.body, '- [x] Publish preview NuGet packages')
         run: |
           dotnet pack ${{ env.SOLUTION_FILE }} \
             --configuration Release \
@@ -74,6 +77,14 @@ jobs:
             --api-key ${{ secrets.FEEDZ_API_KEY }} \
             --source https://f.feedz.io/alanta/keyvault-ca/nuget/index.json \
             --skip-duplicate
+
+      - name: "🏷️ Tag release"
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ steps.gitversion.outputs.semVer }} || true
+          git push origin ${{ steps.gitversion.outputs.semVer }} || true
 
       - name: "⬆️ Upload test results"
         if: always()
