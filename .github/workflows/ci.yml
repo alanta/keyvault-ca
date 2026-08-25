@@ -63,7 +63,7 @@ jobs:
             --logger "trx;LogFileName=test-results.trx" \
             --results-directory coverage
 
-      - name: "� Check publish flag"
+      - name: "🚩 Check publish flag"
         id: check-publish
         uses: actions/github-script@v7
         with:
